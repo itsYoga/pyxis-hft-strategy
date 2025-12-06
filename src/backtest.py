@@ -188,9 +188,10 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
             import matplotlib.pyplot as plt
             from visualization import plot_backtest_results
             
-            # Simple equity curve for visualization only
+            # Create proper equity curve (start from initial capital, end at final equity)
             n_points = 100
-            equity_curve = np.linspace(0, pnl, n_points)
+            initial = max(1.0, initial_capital)  # Avoid divide by zero
+            equity_curve = np.linspace(initial, initial + pnl, n_points)
             position_curve = np.linspace(0, position, n_points)
             
             fig = plot_backtest_results(equity_curve, position_curve, 
@@ -199,6 +200,8 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
                 
         except ImportError:
             print("Visualization skipped (matplotlib not installed)")
+        except Exception as e:
+            print(f"Visualization skipped: {e}")
     
     return {
         'balance': balance,
