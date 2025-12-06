@@ -1,6 +1,6 @@
 # Pyxis HFT 策略框架
 
-**中文** | **[English](README_ZH.md)**
+**中文** | **[English](README_EN.md)**
 
 Pyxis 團隊的高頻交易做市回測框架。
 
