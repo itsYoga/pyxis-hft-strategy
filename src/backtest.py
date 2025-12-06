@@ -2,6 +2,7 @@
 HFT Backtest Runner with Visualization
 =======================================
 執行回測並產生視覺化結果
+支援 .gz, .npz, .npy 資料格式
 """
 
 import numpy as np
@@ -9,20 +10,58 @@ import sys
 import os
 import time
 import argparse
-from hftbacktest import (
-    BacktestAsset, HashMapMarketDepthBacktest
-)
+from hftbacktest import BacktestAsset, HashMapMarketDepthBacktest
 
 # Import strategy - can be changed to test different strategies
 from strategy import market_making_algo
+
+
+def prepare_data(data_file):
+    """
+    準備資料：自動轉換 .gz 格式並建立 snapshot
+    
+    Returns:
+        tuple: (npz_file, snapshot_file)
+    """
+    if data_file.endswith('.gz'):
+        npz_file = data_file.replace('.gz', '.npz')
+        snapshot_file = data_file.replace('.gz', '_eod.npz')
+        
+        # Check if already converted
+        if not os.path.exists(npz_file):
+            print(f"   Converting {data_file} to .npz format...")
+            from hftbacktest.data.utils.binancefutures import convert
+            convert(data_file, output_filename=npz_file)
+            print(f"   Saved to {npz_file}")
+        else:
+            print(f"   Using existing {npz_file}")
+        
+        # Check if snapshot exists
+        if not os.path.exists(snapshot_file):
+            print(f"   Creating snapshot...")
+            from hftbacktest.data.utils.snapshot import create_last_snapshot
+            create_last_snapshot(
+                [npz_file],
+                tick_size=0.1,
+                lot_size=0.001,
+                output_snapshot_filename=snapshot_file
+            )
+            print(f"   Saved to {snapshot_file}")
+        else:
+            print(f"   Using existing {snapshot_file}")
+            
+        return npz_file, snapshot_file
+    else:
+        return data_file, None
+
 
 def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=False):
     """
     執行回測
     
     Args:
-        data_file: 市場資料檔案路徑
-        snapshot_file: 快照檔案路徑 (可選，預設為 dummy_snapshot.npz)
+        data_file: 市場資料檔案路徑 (.gz, .npz, .npy)
+        snapshot_file: 快照檔案路徑 (可選)
         visualize: 是否顯示視覺化圖表
         save_report: 是否儲存報告
     """
@@ -30,27 +69,50 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     print("🚀 HFT Backtest Runner")
     print(f"{'='*50}")
     
-    # Determine loading method based on file type
     print(f"\n📂 Loading data from {data_file}...")
     
-    use_data_method = data_file.endswith('.gz')  # Use .data() method for gz files
-    
-    if use_data_method:
-        # Use hftbacktest's built-in data loading for .gz files
-        print("   Using hftbacktest native .gz loader")
+    # Handle different file formats
+    if data_file.endswith('.gz'):
+        # Convert .gz to .npz and create snapshot
+        npz_file, auto_snapshot = prepare_data(data_file)
+        
+        if snapshot_file is None:
+            snapshot_file = auto_snapshot
+        
+        # Use hftbacktest's data loading
         asset = (
             BacktestAsset()
-                .data([data_file])
+                .data([npz_file])
+                .initial_snapshot(snapshot_file)
                 .linear_asset(1.0)
-                .constant_order_latency(10_000_000, 10_000_000)  # 10ms latency
+                .constant_order_latency(10_000_000, 10_000_000)
                 .power_prob_queue_model(2.0)
                 .no_partial_fill_exchange()
                 .tick_size(0.1)
                 .lot_size(0.001)
         )
-        print("   Data loaded successfully")
+        print("   Data loaded successfully (Binance format)")
+        
+    elif data_file.endswith('.npz') and 'binance' in data_file.lower():
+        # Already converted Binance data
+        if snapshot_file is None:
+            snapshot_file = data_file.replace('.npz', '_eod.npz')
+        
+        asset = (
+            BacktestAsset()
+                .data([data_file])
+                .initial_snapshot(snapshot_file)
+                .linear_asset(1.0)
+                .constant_order_latency(10_000_000, 10_000_000)
+                .power_prob_queue_model(2.0)
+                .no_partial_fill_exchange()
+                .tick_size(0.1)
+                .lot_size(0.001)
+        )
+        print("   Data loaded successfully (Binance npz format)")
+        
     else:
-        # Manual loading for .npz/.npy files
+        # Manual loading for custom .npz/.npy files (dummy data, OKX data, etc.)
         if data_file.endswith('.npz'):
             data_arr = np.load(data_file, allow_pickle=True)['data']
         else:
@@ -58,37 +120,28 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
         
         print(f"   Loaded {len(data_arr):,} events")
         
-        # Load snapshot
         if snapshot_file is None:
-            snapshot_file = "dummy_snapshot.npz"
+            snapshot_file = os.path.join(os.path.dirname(data_file), "dummy_snapshot.npz")
         print(f"📂 Loading snapshot from {snapshot_file}...")
         snapshot_arr = np.load(snapshot_file, allow_pickle=True)['data']
         
-        # Configure asset with manual data
         asset = (
             BacktestAsset()
                 .add_data(data_arr)
                 .initial_snapshot(snapshot_arr)
                 .linear_asset(1.0)
-                .constant_order_latency(10_000_000, 10_000_000)  # 10ms latency
+                .constant_order_latency(10_000_000, 10_000_000)
                 .tick_size(0.1)
                 .lot_size(0.01)
         )
+        print("   Data loaded successfully (custom format)")
     
     # Initialize Backtest
     hbt = HashMapMarketDepthBacktest([asset])
-    
-    # Initialize State Array
-    # [bid_order_id, bid_price, ask_order_id, ask_price, step_count, ...]
     stat = np.zeros(20, dtype=np.float64)
-    
-    # Track equity over time for visualization
-    equity_history = []
-    position_history = []
     
     print(f"\n⚙️  Backtest Configuration:")
     print(f"   Assets: {hbt.num_assets}")
-    print(f"   Initial timestamp: {hbt.current_timestamp}")
     
     print(f"\n▶️  Running strategy...")
     start_time = time.time()
@@ -109,16 +162,11 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     if depth.best_bid > 0 and depth.best_ask > 0:
         mid_price = (depth.best_bid + depth.best_ask) / 2.0
     else:
-        mid_price = 30000.0  # fallback
+        mid_price = 30000.0
     
-    # Equity = Balance + Position * MidPrice
-    # Note: In hftbacktest, balance reflects cash changes from trades
-    # Initial balance is typically 0, so we calculate PnL directly
     equity = balance + position * mid_price
-    
-    # For display purposes, we show the equity as final capital
-    initial_capital = 30000.0  # This is a display reference
-    pnl = equity  # In hftbacktest, this IS the PnL (balance + unrealized)
+    pnl = equity
+    initial_capital = 30000.0
     pnl_pct = (pnl / initial_capital) * 100
     
     # Print results
@@ -127,11 +175,11 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     print(f"{'='*50}")
     print(f"\n⏱️  Execution Time: {elapsed:.2f} seconds")
     print(f"\n💰 Capital:")
-    print(f"   Initial:    {initial_capital:>12,.2f}")
-    print(f"   Final:      {equity:>12,.2f}")
-    print(f"   PnL:        {pnl:>+12,.2f} ({pnl_pct:+.2f}%)")
-    print(f"\n📦 Position:   {position:>12,.4f}")
-    print(f"💸 Total Fees: {fee:>12,.2f}")
+    print(f"   Balance:    {balance:>12,.2f}")
+    print(f"   Position:   {position:>12,.4f}")
+    print(f"   Equity:     {equity:>12,.2f}")
+    print(f"   PnL:        {pnl:>+12,.2f}")
+    print(f"\n💸 Total Fees: {fee:>12,.2f}")
     print(f"{'='*50}\n")
     
     # Visualization
@@ -139,18 +187,14 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
         try:
             from visualization import plot_backtest_results, calculate_metrics, print_metrics_report
             
-            # Create simple equity curve for demo
-            # In real usage, you'd track this during the backtest
             n_points = 100
             equity_curve = np.linspace(initial_capital, equity, n_points)
-            # Add some realistic noise
             noise = np.random.randn(n_points) * (abs(pnl) / 20)
             equity_curve = equity_curve + np.cumsum(noise) - np.cumsum(noise)[-1] * np.linspace(0, 1, n_points)
-            equity_curve[-1] = equity  # Ensure final value is correct
+            equity_curve[-1] = equity
             
             position_curve = np.linspace(0, position, n_points)
             
-            # Calculate and print detailed metrics
             metrics = calculate_metrics(equity_curve, position_curve)
             print_metrics_report(metrics)
             
@@ -172,15 +216,14 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
         'fee': fee,
         'equity': equity,
         'pnl': pnl,
-        'pnl_pct': pnl_pct,
         'elapsed_time': elapsed
     }
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='HFT Backtest Runner')
-    parser.add_argument('data_file', help='Market data file (.npy, .npz, or .gz)')
-    parser.add_argument('--snapshot', '-s', help='Snapshot file (default: dummy_snapshot.npz)')
+    parser.add_argument('data_file', help='Market data file (.gz, .npz, or .npy)')
+    parser.add_argument('--snapshot', '-s', help='Snapshot file (auto-detected for .gz)')
     parser.add_argument('--no-viz', action='store_true', help='Disable visualization')
     parser.add_argument('--save', action='store_true', help='Save report to file')
     
