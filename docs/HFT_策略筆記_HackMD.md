@@ -1,8 +1,27 @@
 # HFT 高頻交易回測系統 - 完整策略筆記
 
-###### tags: `HFT` `量化交易` `Alpha模型` `hftbacktest` `OKX`
+###### tags: `HFT` `量化交易` `Alpha模型` `hftbacktest` `MLOFI` `River`
 
-> **專案目標**：建立高頻做市策略，使用 OKX 真實資料回測，透過 Alpha 信號優化策略表現
+> **專案目標**：建立高頻做市策略，使用 Binance/OKX 真實資料回測，透過 Alpha 信號優化策略表現
+> **最後更新**: 2025-12-07
+
+---
+
+## 快速開始
+
+```bash
+# 1. 安裝依賴
+cd /Users/jesse/Documents/NTUFC/pyxis-hft-strategy
+pip install -r requirements.txt
+pip install river  # 線上學習 (可選)
+
+# 2. 用真實資料回測
+./venv/bin/python src/backtest.py data/binance_usdm/btcusdt_20240808.npz \
+    --snapshot data/binance_usdm/btcusdt_20240808_eod.npz --no-viz
+
+# 3. 評估 River 線上學習
+./venv/bin/python src/ab_testing.py
+```
 
 ---
 
@@ -12,575 +31,382 @@
 
 ---
 
-## 一、專案架構總覽
+## 一、專案架構
 
-### 1.1 專案結構
+### 1.1 專案結構 (最新)
 
 ```
-hftbacktest/
-├── okx_hft/                    # 我們的策略目錄
-│   ├── recorder.py             # OKX 資料收集器
-│   ├── normalize.py            # 資料正規化
-│   ├── generate_dummy.py       # 假資料生成(測試用)
+pyxis-hft-strategy/
+├── src/                        # 核心程式碼
+│   ├── strategy.py             # ⭐ MLOFI + AS 策略 (主要)
 │   ├── backtest.py             # 回測主程式
-│   └── strategy.py             # 策略核心 (Alpha 在這裡!)
-├── examples/                   # 官方教程 (重要參考!)
-│   ├── Market Making with Alpha - Order Book Imbalance.ipynb
-│   ├── High-Frequency Grid Trading.ipynb
-│   └── ...
-└── py-hftbacktest/             # Python 函式庫
+│   ├── online_learning.py      # River 線上學習
+│   ├── ab_testing.py           # A/B 測試框架
+│   ├── reconciliation.py       # 對賬機制
+│   ├── recorder.py             # 資料收集器
+│   ├── live_trading.py         # 即時交易
+│   └── visualization.py        # 視覺化
+├── data/                       # 市場資料
+│   ├── binance_usdm/           # ✓ Binance 永續合約
+│   │   ├── btcusdt_20240808.npz
+│   │   └── btcusdt_20240808_eod.npz
+│   ├── binance_spot/           # Binance 現貨
+│   └── bybit/                  # Bybit
+├── docs/                       # 文檔
+├── notebooks/                  # Jupyter 分析
+└── scripts/                    # 腳本
 ```
 
-### 1.2 系統架構圖
+### 1.2 模組功能表
 
+| 模組 | 功能 | 使用方式 |
+|------|------|---------|
+| **strategy.py** | MLOFI + LOB Slope + 體制識別 | 被 backtest.py 調用 |
+| **backtest.py** | 執行回測 | `python src/backtest.py <data.npz>` |
+| **online_learning.py** | River 線上學習 | `from online_learning import OnlineAlphaLearner` |
+| **ab_testing.py** | A/B 測試 | `python src/ab_testing.py` |
+| **reconciliation.py** | 對賬/PnL 驗證 | `from reconciliation import Reconciler` |
+| **recorder.py** | 收集 OKX 資料 | `python src/recorder.py --symbol BTC-USDT-SWAP` |
+
+---
+
+## 二、使用資料
+
+### 2.1 現有資料
+
+你已經有真實 Binance 數據！
+
+```bash
+# 查看可用資料
+ls -la data/binance_usdm/
+
+# 輸出:
+# btcusdt_20240808.npz      (3.6 MB, ~100萬事件)
+# btcusdt_20240808_eod.npz  (快照)
+# btcusdt_20240809.npz      (4.8 MB)
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      資料流程                                │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐              │
-│  │   OKX    │───>│ recorder │───>│ .npz 檔  │              │
-│  │WebSocket │    │   .py    │    │  (chunks)│              │
-│  └──────────┘    └──────────┘    └──────────┘              │
-│                                       │                     │
-│                                       v                     │
-│                              ┌──────────────┐               │
-│                              │ normalize.py │               │
-│                              └──────────────┘               │
-│                                       │                     │
-│                                       v                     │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐              │
-│  │  結果    │<───│ backtest │<───│ 合併後   │              │
-│  │  分析    │    │   .py    │    │  .npz    │              │
-│  └──────────┘    └──────────┘    └──────────┘              │
-│                       ^                                     │
-│                       │                                     │
-│                  ┌──────────┐                               │
-│                  │ strategy │                               │
-│                  │   .py    │                               │
-│                  └──────────┘                               │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+
+### 2.2 運行回測
+
+```bash
+# 使用真實 Binance 資料
+./venv/bin/python src/backtest.py \
+    data/binance_usdm/btcusdt_20240808.npz \
+    --snapshot data/binance_usdm/btcusdt_20240808_eod.npz \
+    --no-viz
+
+# 結果範例:
+# PnL: +427.00
+```
+
+### 2.3 用 Dummy Data 測試
+
+如果沒有真實資料：
+
+```bash
+# 生成假資料
+./venv/bin/python src/generate_dummy.py
+
+# 用假資料回測
+./venv/bin/python src/backtest.py src/dummy_data.npy --no-viz
+```
+
+### 2.4 收集新資料 (OKX)
+
+```bash
+# 開始錄製 (會持續運行)
+./venv/bin/python src/recorder.py --symbol BTC-USDT-SWAP --output data/okx/
+
+# 建議錄製時間:
+# - 測試: 30 分鐘
+# - 正式: 2-4 小時
+# - 完整: 24 小時+
 ```
 
 ---
 
-## 二、回測引擎原理
+## 三、策略詳解 (HA3 架構)
 
-### 2.1 什麼是回測？
-
-回測 = **用歷史資料模擬交易**，驗證策略是否賺錢
+### 3.1 策略公式
 
 ```
-歷史資料 ────> 回測引擎 ────> 模擬成交 ────> 計算盈虧
-   │              │              │
-   │              v              │
-   │     ┌────────────────┐      │
-   └────>│  你的策略邏輯  │<─────┘
-         └────────────────┘
+保留價格 = 中間價 + Alpha預測 - 庫存調整
+報價 = 保留價格 ± 動態價差
 ```
 
-### 2.2 hftbacktest 特色
+### 3.2 Alpha 訊號組成
 
-| 特點 | 說明 |
+| Alpha | 權重 | 說明 |
+|-------|------|------|
+| **Micro Price** | 30% | BBO 數量加權價格 |
+| **MLOFI** | 50% | 5層訂單流不平衡 |
+| **EPI (OFI/Slope)** | 20% | 預期價格衝擊 |
+
+### 3.3 MLOFI (Multi-Level Order Flow Imbalance)
+
+傳統 OFI 只看 Level 1，MLOFI 分析 5 層深度：
+
+```python
+# strategy.py 核心邏輯
+for i in range(5):  # 5 層
+    weight = 0.7 ** i  # 指數衰減 (Level 1 權重最高)
+    delta_bid = bid_qtys[i] - prev_bid_qtys[i]
+    delta_ask = ask_qtys[i] - prev_ask_qtys[i]
+    mlofi += weight * (delta_bid - delta_ask)
+```
+
+**研究顯示**：MLOFI 比 Level 1 OFI 預測準確度提升 15-74%
+
+### 3.4 LOB Slope (訂單簿斜率)
+
+衡量市場「厚度」= 對價格衝擊的阻力
+
+```
+高斜率 → 厚實訂單簿 → 均值回歸環境
+低斜率 → 稀薄訂單簿 → 動能突破環境
+```
+
+### 3.5 體制識別 (Regime Detection)
+
+根據波動率自動調整策略：
+
+| 體制 | 條件 | 策略調整 |
+|------|------|---------|
+| Calm | vol_ratio < 1.0 | 縮窄價差 |
+| Active | 1.0-2.0 | 正常 |
+| Volatile | > 2.0 | 擴大價差，減少持倉 |
+
+---
+
+## 四、River 線上學習
+
+### 4.1 什麼是 River？
+
+River 是 Python 線上學習庫，可以**即時**調整 Alpha 權重，適應市場變化。
+
+```python
+# 使用方式
+from online_learning import OnlineAlphaLearner, AlphaSignals
+
+learner = OnlineAlphaLearner(
+    learning_rate=0.01,
+    warmup_steps=100
+)
+
+# 每個 timestep
+signals = AlphaSignals(
+    micro_price_alpha=0.5,
+    mlofi_alpha=0.8,
+    slope_alpha=0.3,
+    mid_price=50000.0
+)
+learner.observe(signals)
+weights = learner.get_weights()  # {'micro': 0.3, 'mlofi': 0.5, 'slope': 0.2}
+```
+
+### 4.2 如何評估 River 是否有效？
+
+**關鍵問題：Mock Data 無法評估 River 效果！**
+
+原因：
+- Mock data 的 Alpha 與價格關係是固定的
+- 靜態權重如果剛好正確，River 無法超越
+- **River 的價值在於適應市場變化**
+
+**正確評估方法：**
+
+```bash
+# 1. 用真實資料運行 A/B 測試
+./venv/bin/python src/ab_testing.py
+
+# 2. 查看統計顯著性
+# p < 0.05 且 River > Baseline → 使用 River
+# 否則 → 使用靜態權重或調參
+```
+
+### 4.3 A/B 測試解讀
+
+| 結果 | 行動 |
 |------|------|
-| **Tick-by-Tick** | 逐筆模擬，不漏掉任何市場變化 |
-| **延遲模擬** | 考慮訂單送達交易所的時間延遲 |
-| **隊列位置** | 模擬掛單在訂單簿中的排隊位置 |
-| **Numba JIT** | 用 `@njit` 加速 Python 程式碼 |
+| River 顯著優於 Baseline (p < 0.05) | ✅ 使用 River |
+| River 較好但不顯著 | 收集更多資料 |
+| Baseline 較好 | 調參或用靜態權重 |
 
-### 2.3 核心 API
-
-```python
-from hftbacktest import (
-    BacktestAsset,           # 資產配置
-    HashMapMarketDepthBacktest,  # 回測引擎
-    BUY, SELL, GTX, LIMIT    # 訂單常數
-)
-
-# 回測主迴圈
-@njit
-def my_strategy(hbt):
-    while hbt.elapse(100_000_000) == 0:  # 每 100ms
-        # 清理已成交/取消的訂單
-        hbt.clear_inactive_orders(0)
-        
-        # 取得市場資料
-        depth = hbt.depth(0)
-        mid_price = (depth.best_bid + depth.best_ask) / 2.0
-        position = hbt.position(0)
-        
-        # 你的策略邏輯...
-        # 下單
-        hbt.submit_buy_order(0, order_id, price, qty, GTX, LIMIT, False)
-```
-
----
-
-## 三、取得 OKX 真實資料
-
-### 3.1 為什麼需要真實資料？
-
-> [!WARNING]
-> **用假資料回測 = 自我欺騙**
->
-> - 假資料無法反映真實市場波動
-> - 無法驗證策略在極端行情的表現
-> - **比賽一定要用真實資料！**
-
-### 3.2 OKX WebSocket 資料來源
-
-| Channel | 說明 | 更新頻率 | 深度 |
-|---------|------|---------|------|
-| `books-l2-tbt` | 訂單簿 (推薦) | 10ms | 400檔 |
-| `books50-l2-tbt` | 訂單簿 | 10ms | 50檔 |
-| `trades` | 成交紀錄 | 即時 | - |
-
-### 3.3 資料收集步驟
-
-#### Step 1: 開始錄製
-
-```bash
-cd /path/to/hftbacktest/okx_hft
-
-# 開始錄製 BTC-USDT-SWAP (建議至少錄製 1-2 小時)
-python recorder.py --symbol BTC-USDT-SWAP --output data/
-
-# 程式會持續運行，按 Ctrl+C 停止
-```
-
-#### Step 2: 檢查錄製狀態
-
-```bash
-# 方法 1: 檢查 process 是否執行中
-ps aux | grep recorder.py | grep -v grep
-
-# 方法 2: 查看 data/ 資料夾大小
-ls -la data/
-du -sh data/
-
-# 方法 3: 計算已收集事件數
-python -c "import numpy as np; import glob; files=glob.glob('data/*.npz'); total=sum(len(np.load(f)['data']) for f in files); print(f'Total events: {total}')"
-```
-
-> [!TIP]
-> **建議錄製時間**
-> - 測試用：30 分鐘
-> - 正式回測：2-4 小時
-> - 完整驗證：24 小時以上
-> - 生產環境：2 週 (需雲端伺服器)
-
-#### Step 3: 資料正規化
-
-```bash
-# 合併所有 chunk 檔案
-python normalize.py --input data/ --output okx_btc_data.npz
-```
-
-#### Step 4: 執行回測
-
-```bash
-python backtest.py okx_btc_data.npz
-```
-
-### 3.4 資料格式說明
+### 4.4 調參建議
 
 ```python
-# hftbacktest 資料結構 (每個 event)
-dtype = [
-    ('ev', 'u8'),        # 事件類型 (DEPTH/TRADE/BUY/SELL)
-    ('exch_ts', 'i8'),   # 交易所時間戳 (ns)
-    ('local_ts', 'i8'),  # 本地時間戳 (ns)
-    ('px', 'f8'),        # 價格
-    ('qty', 'f8'),       # 數量
-    ('order_id', 'u8'),  # 訂單 ID (L3 用)
-    ('ival', 'i8'),      # 保留
-    ('fval', 'f8'),      # 保留
-]
-```
-
----
-
-## 四、Alpha 模型詳解 (策略核心)
-
-### 4.1 什麼是 Alpha？
-
-> [!NOTE]
-> **Alpha = 預測價格方向的能力 = 超額收益的來源**
->
-> - Alpha > 0 : 預測價格會漲
-> - Alpha < 0 : 預測價格會跌
-> - Alpha = 0 : 沒有預測能力
-
-### 4.2 Order Book Imbalance (OBI) - 訂單簿失衡
-
-最常用的 Alpha 信號之一！
-
-#### 公式
-
-$$
-\text{Imbalance} = \frac{\text{Bid Volume} - \text{Ask Volume}}{\text{Bid Volume} + \text{Ask Volume}}
-$$
-
-#### 直覺解釋
-
-```
-買單多於賣單 -> Imbalance > 0 -> 買壓大 -> 價格可能上漲
-賣單多於買單 -> Imbalance < 0 -> 賣壓大 -> 價格可能下跌
-```
-
-### 4.3 Micro Price - 微觀價格
-
-考慮 BBO (Best Bid/Offer) 數量的加權中間價
-
-#### 公式
-
-$$
-\text{Micro Price} = \frac{P_{bid} \times Q_{ask} + P_{ask} \times Q_{bid}}{Q_{bid} + Q_{ask}}
-$$
-
-### 4.4 Trade Flow Imbalance - 成交流失衡
-
-追蹤最近成交的方向
-
-```python
-@njit
-def calculate_trade_flow(last_trades, window=100):
-    buy_volume = 0.0
-    sell_volume = 0.0
-    for trade in last_trades[-window:]:
-        if trade.ev & BUY_EVENT == BUY_EVENT:
-            buy_volume += trade.qty
-        else:
-            sell_volume += trade.qty
-    return (buy_volume - sell_volume) / (buy_volume + sell_volume)
-```
-
----
-
-## 五、策略優化指南
-
-### 5.1 當前策略 (AS Model + Alpha)
-
-```python
-# 保留價格 = 中間價 + Alpha預測 - 庫存調整
-reservation_price = (
-    mid_price 
-    + forecast * tick_size      # Alpha 預測
-    - position * gamma * volatility^2  # 庫存風險
+# 如果 River 表現不好，嘗試：
+learner = OnlineAlphaLearner(
+    learning_rate=0.005,   # 降低學習率 (更穩定)
+    warmup_steps=200,      # 增加 warmup (避免早期波動)
+    l2_reg=0.01            # 增加正則化 (防止過擬合)
 )
 ```
 
-### 5.2 參數優化表
-
-| 參數 | 作用 | 建議範圍 | 調整方向 |
-|------|------|---------|---------|
-| `gamma` | 風險厭惡 | 0.01 - 1.0 | 越大則越快平倉 |
-| `k` | Spread 彈性 | 0.5 - 3.0 | 越大則 Spread 越窄 |
-| `alpha_weight` | Alpha 權重 | 0.1 - 1.0 | 看回測結果調整 |
-| `imbalance_weight` | Imbalance 權重 | 0.1 - 1.0 | 看回測結果調整 |
-
 ---
 
-## 六、GitHub Repo 建立指南
+## 五、PnL 計算 (Kronos 方法)
 
-### 6.1 建議的 Repo 結構
+### 5.1 正確公式
 
-```
-okx-hft-strategy/
-├── README.md               # 專案說明
-├── requirements.txt        # Python 依賴
-├── .gitignore             # 忽略檔案
-├── config/
-│   └── settings.py        # 配置參數
-├── src/
-│   ├── recorder.py        # 資料收集
-│   ├── normalize.py       # 資料處理
-│   ├── backtest.py        # 回測主程式
-│   └── strategy.py        # 策略邏輯
-├── data/                  # 資料目錄 (gitignore)
-│   └── .gitkeep
-├── notebooks/             # 分析 Notebooks
-│   └── analysis.ipynb
-├── scripts/
-│   ├── run_recorder.sh    # 錄製腳本
-│   └── run_backtest.sh    # 回測腳本
-└── docs/
-    └── strategy_notes.md  # 策略文檔
+```python
+# backtest.py 中的計算
+equity_wo_fee = balance + position * mid_price * contract_size
+equity = equity_wo_fee - fee  # 扣除手續費
+pnl = equity
 ```
 
-### 6.2 .gitignore 設定
+### 5.2 對賬機制
 
-```
-# Data files (太大不適合放 Git)
-data/*.npz
-data/*.npy
-*.npz
-*.npy
+```python
+from reconciliation import Reconciler
 
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# IDE
-.vscode/
-.idea/
-
-# Logs
-*.log
-
-# OS
-.DS_Store
-```
-
-### 6.3 requirements.txt
-
-```
-numpy>=1.24.0
-numba>=0.57.0
-hftbacktest>=2.0.0
-websockets>=12.0
-pandas>=2.0.0
-matplotlib>=3.7.0
-```
-
-### 6.4 建立 Repo 步驟
-
-```bash
-# 1. 建立新目錄
-mkdir okx-hft-strategy
-cd okx-hft-strategy
-
-# 2. 初始化 Git
-git init
-
-# 3. 複製必要檔案
-cp /path/to/original/okx_hft/*.py src/
-
-# 4. 建立 .gitignore 和 requirements.txt
-# (內容如上)
-
-# 5. 初次提交
-git add .
-git commit -m "Initial commit: HFT strategy framework"
-
-# 6. 連結 GitHub
-git remote add origin https://github.com/YOUR_USERNAME/okx-hft-strategy.git
-git push -u origin main
+reconciler = Reconciler()
+reconciler.record_trade(timestamp, order_id, 'BUY', price, qty, fee, balance, position)
+result = reconciler.reconcile(final_balance, final_position, final_fee)
+print(result)  # PASS / FAIL
 ```
 
 ---
 
-## 七、雲端部署指南 (長期錄製)
+## 六、完整運行流程
 
-### 7.1 為什麼需要雲端？
-
-| 問題 | 本地電腦 | 雲端伺服器 |
-|------|---------|-----------|
-| **24/7 運行** | 電腦會當機/休眠 | 持續運行 |
-| **網路延遲** | 家用網路不穩定 | 專線低延遲 |
-| **運算資源** | 可能不夠 | 可彈性擴展 |
-| **2 週錄製** | 不切實際 | 輕鬆達成 |
-
-### 7.2 OKX 伺服器位置
-
-OKX 使用 **阿里雲香港** 作為主要伺服器，也有 AWS 部署。
-
-| 雲端區域 | 到 OKX 延遲 | 建議用途 |
-|---------|------------|---------|
-| **香港 (HK)** | 1-3ms | 最佳! 正式上線必選 |
-| **東京 (Tokyo)** | 30-50ms | 次佳選擇 |
-| **新加坡 (SG)** | 20-40ms | 可接受 |
-| **台灣本地** | 50-100ms | 僅用於開發測試 |
-
-### 7.3 雲端選擇比較
-
-| 服務 | 香港機房 | 月費 (最低規格) | 推薦度 |
-|------|---------|----------------|--------|
-| **阿里雲** | 有 (cn-hongkong) | ~$25 USD | 最推薦 (與 OKX 同機房) |
-| **AWS** | 有 (ap-east-1) | ~$20 USD | 推薦 |
-| **GCP** | 有 (asia-east2) | ~$25 USD | 推薦 |
-| **Vultr** | 有 | ~$6 USD | 便宜選擇 |
-| **DigitalOcean** | 有 (Singapore) | ~$6 USD | 便宜選擇 |
-
-### 7.4 建議規格
-
-**資料收集 (2 週)**
-- vCPU: 1-2 核
-- RAM: 2-4 GB
-- Storage: 50-100 GB SSD
-- 月費: $10-30 USD
-
-**回測運算**
-- vCPU: 4-8 核
-- RAM: 8-16 GB
-- Storage: 100 GB SSD
-- 月費: $50-100 USD
-
-### 7.5 部署步驟
+### 6.1 回測流程
 
 ```bash
-# 1. SSH 連線到雲端伺服器
-ssh root@YOUR_SERVER_IP
+# Step 1: 確認環境
+cd /Users/jesse/Documents/NTUFC/pyxis-hft-strategy
+source venv/bin/activate
 
-# 2. 安裝 Python 環境
-apt update && apt install -y python3 python3-pip python3-venv
+# Step 2: 選擇資料
+DATA=data/binance_usdm/btcusdt_20240808.npz
+SNAPSHOT=data/binance_usdm/btcusdt_20240808_eod.npz
 
-# 3. Clone 你的 repo
-git clone https://github.com/YOUR_USERNAME/okx-hft-strategy.git
-cd okx-hft-strategy
+# Step 3: 運行回測
+./venv/bin/python src/backtest.py $DATA --snapshot $SNAPSHOT --no-viz
 
-# 4. 建立虛擬環境
+# Step 4: 查看結果
+# Balance, Position, PnL 會顯示在終端
+```
+
+### 6.2 A/B 測試流程
+
+```bash
+# 評估 River vs 靜態權重
+./venv/bin/python src/ab_testing.py
+```
+
+### 6.3 即時交易 (未來)
+
+```bash
+# 需要設定 .env 中的 API 金鑰
+./venv/bin/python src/live_trading.py
+```
+
+---
+
+## 七、參數優化
+
+### 7.1 策略參數 (strategy.py)
+
+| 參數 | 預設值 | 作用 | 調整方向 |
+|------|--------|------|---------|
+| `gamma_base` | 0.1 | 風險厭惡 | ↑ 更快平倉 |
+| `k_base` | 1.5 | 價差彈性 | ↑ 更窄價差 |
+| `num_levels` | 5 | MLOFI 層數 | 5-10 層 |
+| `ofi_decay` | 0.7 | 深層權重衰減 | 0.5-0.9 |
+| `max_position` | 10 | 最大持倉 | 視風險調整 |
+
+### 7.2 River 參數 (online_learning.py)
+
+| 參數 | 預設值 | 作用 |
+|------|--------|------|
+| `learning_rate` | 0.01 | 學習速度 |
+| `warmup_steps` | 100 | 預熱期 |
+| `l2_reg` | 0.001 | 正則化強度 |
+
+---
+
+## 八、雲端部署 (VPS)
+
+### 8.1 推薦配置
+
+| 用途 | CPU | RAM | 存儲 | 月費 |
+|------|-----|-----|------|------|
+| 資料收集 | 1-2 核 | 2 GB | 50 GB | $10-20 |
+| 即時交易 | 2-4 核 | 4 GB | 50 GB | $20-40 |
+
+### 8.2 推薦區域
+
+| 交易所 | 推薦區域 | 延遲 |
+|--------|---------|------|
+| OKX | 香港 | 1-3ms |
+| Binance | 東京/新加坡 | 10-30ms |
+
+### 8.3 部署步驟
+
+```bash
+# 1. SSH 連線
+ssh root@YOUR_VPS_IP
+
+# 2. Clone repo
+git clone https://github.com/YOUR_USERNAME/pyxis-hft-strategy.git
+cd pyxis-hft-strategy
+
+# 3. 安裝環境
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# 5. 使用 tmux/screen 背景執行 (防斷線)
-tmux new -s recorder
-
-# 6. 開始錄製
-python src/recorder.py --symbol BTC-USDT-SWAP --output data/
-
-# 按 Ctrl+B 然後 D 離開 tmux (程式繼續運行)
-# 重新連接: tmux attach -t recorder
-```
-
-### 7.6 長期錄製腳本
-
-```bash
-#!/bin/bash
-# run_recorder.sh - 自動重啟錄製
-
-while true; do
-    echo "[$(date)] Starting recorder..."
-    python src/recorder.py --symbol BTC-USDT-SWAP --output data/
-    echo "[$(date)] Recorder stopped. Restarting in 10 seconds..."
-    sleep 10
-done
-```
-
-### 7.7 資料備份策略
-
-```bash
-# 每天自動備份到本地
-# 加入 crontab: crontab -e
-
-# 每天凌晨 3 點備份
-0 3 * * * rsync -avz root@YOUR_SERVER:/path/to/data/ /local/backup/
+# 4. 使用 tmux 背景執行
+tmux new -s trading
+./venv/bin/python src/live_trading.py
+# Ctrl+B, D 離開 (程式繼續運行)
 ```
 
 ---
 
-## 八、降低延遲的方法
+## 九、常見問題
 
-### 8.1 延遲來源分析
+### Q1: Mock data 和真實資料結果差很多？
+**A:** 正常！Mock data 沒有真實市場的複雜性。一定要用真實資料驗證。
 
-```
-總延遲 = 網路延遲 + 處理延遲 + 交易所延遲
+### Q2: River 表現比 Baseline 差？
+**A:** 可能原因：
+- 學習率太高 → 降低到 0.005
+- Warmup 太短 → 增加到 200
+- 資料太少 → 收集更多資料
 
-網路延遲: 你的伺服器到 OKX 的時間
-處理延遲: 你的程式執行時間
-交易所延遲: OKX 處理訂單的時間 (~3ms)
-```
+### Q3: PnL 為什麼是 0？
+**A:** 檢查：
+- 資料是否正確載入
+- Snapshot 檔案是否存在
+- 策略是否有下單
 
-### 8.2 優化方法
-
-| 優化項目 | 方法 | 預期效果 |
-|---------|------|---------|
-| **網路延遲** | 使用香港機房 | 降低 50-100ms |
-| **程式效能** | 使用 Numba @njit | 提升 10-100 倍 |
-| **資料結構** | 預分配 numpy array | 減少 GC 暫停 |
-| **WebSocket** | 使用 async | 非阻塞處理 |
-
-### 8.3 延遲測試
-
-```python
-import time
-import asyncio
-import websockets
-
-async def measure_latency():
-    url = "wss://ws.okx.com:8443/ws/v5/public"
-    async with websockets.connect(url) as ws:
-        start = time.time_ns()
-        await ws.send('{"op": "ping"}')
-        response = await ws.recv()
-        end = time.time_ns()
-        print(f"RTT: {(end - start) / 1e6:.2f} ms")
-
-asyncio.run(measure_latency())
-```
+### Q4: 如何知道策略是否過擬合？
+**A:** 用不同日期的資料做 out-of-sample 測試。
 
 ---
 
-## 九、評估指標
+## 十、下一步
 
-| 指標 | 說明 | 目標 |
-|------|------|------|
-| **PnL** | 總盈虧 | > 0 |
-| **Sharpe Ratio** | 風險調整收益 | > 1.5 |
-| **Max Drawdown** | 最大回撤 | < 10% |
-| **Win Rate** | 勝率 | > 50% |
-| **Turnover** | 換手率 | 合理範圍 |
+### 立即可做
+- [x] MLOFI 策略實作
+- [x] River 線上學習
+- [x] A/B 測試框架
+- [ ] 用多天資料驗證
+- [ ] VPS 部署
 
----
-
-## 十、時程規劃
-
-### 短期 (1-2 週)
-- [ ] 完成本地測試
-- [ ] 收集 24 小時真實資料
-- [ ] 優化策略參數
-
-### 中期 (2-4 週)
-- [ ] 部署雲端伺服器
-- [ ] 收集 2 週資料
-- [ ] 完整回測驗證
-- [ ] 撰寫報告
-
-### 長期 (比賽後)
-- [ ] 嘗試更多 Alpha 信號
-- [ ] 實盤小額測試
-- [ ] 持續優化
+### 未來研究
+- [ ] Lead-Lag 跨資產套利
+- [ ] VPIN 毒性偵測
+- [ ] RL 執行優化
 
 ---
 
-## 十一、常見問題
+## 參考資源
 
-### Q1: 為什麼回測結果是 0？
-**A:** 檢查資料是否正確載入，確保有 depth update 事件
-
-### Q2: 如何知道策略是否過度擬合？
-**A:** 用不同時間段的資料做 out-of-sample 測試
-
-### Q3: recorder.py 連不上 OKX？
-**A:** 確認網路連線，可能需要 VPN
-
-### Q4: 雲端伺服器選擇？
-**A:** 優先選阿里雲香港，與 OKX 同機房延遲最低
-
-### Q5: 2 週資料大約多大？
-**A:** BTC-USDT-SWAP 約 10-50 GB (視市場活躍度)
-
----
-
-## 十二、參考資源
-
-### 必讀教程
-- [Market Making with Alpha - Order Book Imbalance](https://hftbacktest.readthedocs.io/en/latest/tutorials/Market%20Making%20with%20Alpha%20-%20Order%20Book%20Imbalance.html)
-- [High-Frequency Grid Trading](https://hftbacktest.readthedocs.io/en/latest/tutorials/High-Frequency%20Grid%20Trading.html)
-
-### 學術論文
-- [Avellaneda-Stoikov (2008)](https://math.nyu.edu/~avellane/HighFrequencyTrading.pdf) - 做市策略經典
-- [GLFT Model](https://arxiv.org/abs/1105.3115) - Grid Trading 理論
-- [101 Formulaic Alphas (2016)](https://arxiv.org/abs/1601.00991) - 101 個 Alpha 公式 (強烈推薦!)
-
-### API 文檔
-- [OKX WebSocket API](https://www.okx.com/docs-v5/en/#overview-websocket)
-
----
-
-> **最後更新**: 2025-12-06
-> **作者**: Jesse
+- [hftbacktest 文檔](https://hftbacktest.readthedocs.io/)
+- [River ML](https://riverml.xyz/)
+- [Avellaneda-Stoikov 論文](https://math.nyu.edu/~avellane/HighFrequencyTrading.pdf)
+- [MLOFI 研究 (2024)](https://arxiv.org/abs/2401.06485)

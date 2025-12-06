@@ -157,6 +157,7 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     balance = stat_val.balance
     position = stat_val.position
     fee = stat_val.fee
+    contract_size = 1.0  # Configurable: contract size multiplier
     
     depth = hbt.depth(0)
     if depth.best_bid > 0 and depth.best_ask > 0:
@@ -164,7 +165,9 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     else:
         mid_price = 30000.0
     
-    equity = balance + position * mid_price
+    # Kronos method: equity = balance + position * price * contract_size - fee
+    equity_wo_fee = balance + position * mid_price * contract_size
+    equity = equity_wo_fee - fee  # Correct: deduct accumulated fees
     pnl = equity
     initial_capital = 30000.0
     pnl_pct = (pnl / initial_capital) * 100
@@ -175,11 +178,13 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     print(f"{'='*50}")
     print(f"\nExecution Time: {elapsed:.2f} seconds")
     print(f"\nCapital:")
-    print(f"   Balance:    {balance:>12,.2f}")
-    print(f"   Position:   {position:>12,.4f}")
-    print(f"   Equity:     {equity:>12,.2f}")
-    print(f"   PnL:        {pnl:>+12,.2f}")
-    print(f"\nTotal Fees: {fee:>12,.2f}")
+    print(f"   Balance:         {balance:>12,.2f}")
+    print(f"   Position:        {position:>12,.4f}")
+    print(f"   Mid Price:       {mid_price:>12,.2f}")
+    print(f"   Equity (no fee): {equity_wo_fee:>12,.2f}")
+    print(f"   Total Fees:      {fee:>12,.2f}")
+    print(f"   Equity (net):    {equity:>12,.2f}")
+    print(f"   PnL:             {pnl:>+12,.2f}")
     print(f"{'='*50}\n")
     
     # Visualization (only show chart if requested)
