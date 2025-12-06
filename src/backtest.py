@@ -66,10 +66,10 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
         save_report: 是否儲存報告
     """
     print(f"\n{'='*50}")
-    print("🚀 HFT Backtest Runner")
+    print("HFT Backtest Runner")
     print(f"{'='*50}")
     
-    print(f"\n📂 Loading data from {data_file}...")
+    print(f"\nLoading data from {data_file}...")
     
     # Handle different file formats
     if data_file.endswith('.gz'):
@@ -122,7 +122,7 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
         
         if snapshot_file is None:
             snapshot_file = os.path.join(os.path.dirname(data_file), "dummy_snapshot.npz")
-        print(f"📂 Loading snapshot from {snapshot_file}...")
+        print(f"Loading snapshot from {snapshot_file}...")
         snapshot_arr = np.load(snapshot_file, allow_pickle=True)['data']
         
         asset = (
@@ -140,10 +140,10 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     hbt = HashMapMarketDepthBacktest([asset])
     stat = np.zeros(20, dtype=np.float64)
     
-    print(f"\n⚙️  Backtest Configuration:")
+    print(f"\nBacktest Configuration:")
     print(f"   Assets: {hbt.num_assets}")
     
-    print(f"\n▶️  Running strategy...")
+    print(f"\nRunning strategy...")
     start_time = time.time()
     
     # Run Strategy
@@ -171,15 +171,15 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     
     # Print results
     print(f"\n{'='*50}")
-    print("📊 BACKTEST RESULTS")
+    print("BACKTEST RESULTS")
     print(f"{'='*50}")
-    print(f"\n⏱️  Execution Time: {elapsed:.2f} seconds")
-    print(f"\n💰 Capital:")
+    print(f"\nExecution Time: {elapsed:.2f} seconds")
+    print(f"\nCapital:")
     print(f"   Balance:    {balance:>12,.2f}")
     print(f"   Position:   {position:>12,.4f}")
     print(f"   Equity:     {equity:>12,.2f}")
     print(f"   PnL:        {pnl:>+12,.2f}")
-    print(f"\n💸 Total Fees: {fee:>12,.2f}")
+    print(f"\nTotal Fees: {fee:>12,.2f}")
     print(f"{'='*50}\n")
     
     # Visualization
@@ -208,7 +208,7 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
                 plt.show()
                 
         except ImportError:
-            print("⚠️  Visualization skipped (matplotlib not installed)")
+            print("Visualization skipped (matplotlib not installed)")
     
     return {
         'balance': balance,
