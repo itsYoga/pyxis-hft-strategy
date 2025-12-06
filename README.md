@@ -178,6 +178,24 @@ python backtest.py data.npz -s snapshot.npz # 自訂快照
 
 ---
 
+## Live Trading (OKX Demo)
+
+```bash
+cd src
+
+# 1. 設定 API (複製 .env.example 並填入你的 API)
+cp ../.env.example ../.env
+# 編輯 .env 填入 OKX Demo Trading API Key/Secret/Passphrase
+
+# 2. 測試連線
+python live_trading.py --test
+
+# 3. 啟動交易 (12/15 開始)
+python live_trading.py
+```
+
+---
+
 ## Notebooks (21 個教程!)
 
 | 主題 | Notebook |
