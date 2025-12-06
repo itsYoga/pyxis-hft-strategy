@@ -30,35 +30,50 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     print("🚀 HFT Backtest Runner")
     print(f"{'='*50}")
     
-    # Load data
+    # Determine loading method based on file type
     print(f"\n📂 Loading data from {data_file}...")
-    if data_file.endswith('.npz'):
-        data_arr = np.load(data_file)['data']
-    elif data_file.endswith('.gz'):
-        import gzip
-        with gzip.open(data_file, 'rb') as f:
-            data_arr = np.load(f)['data']
+    
+    use_data_method = data_file.endswith('.gz')  # Use .data() method for gz files
+    
+    if use_data_method:
+        # Use hftbacktest's built-in data loading for .gz files
+        print("   Using hftbacktest native .gz loader")
+        asset = (
+            BacktestAsset()
+                .data([data_file])
+                .linear_asset(1.0)
+                .constant_order_latency(10_000_000, 10_000_000)  # 10ms latency
+                .power_prob_queue_model(2.0)
+                .no_partial_fill_exchange()
+                .tick_size(0.1)
+                .lot_size(0.001)
+        )
+        print("   Data loaded successfully")
     else:
-        data_arr = np.load(data_file)
-    
-    print(f"   Loaded {len(data_arr):,} events")
-    
-    # Load snapshot
-    if snapshot_file is None:
-        snapshot_file = "dummy_snapshot.npz"
-    print(f"📂 Loading snapshot from {snapshot_file}...")
-    snapshot_arr = np.load(snapshot_file)['data']
-    
-    # Configure asset
-    asset = (
-        BacktestAsset()
-            .add_data(data_arr)
-            .initial_snapshot(snapshot_arr)
-            .linear_asset(1.0)
-            .constant_order_latency(10_000_000, 10_000_000)  # 10ms latency
-            .tick_size(0.1)
-            .lot_size(0.01)
-    )
+        # Manual loading for .npz/.npy files
+        if data_file.endswith('.npz'):
+            data_arr = np.load(data_file, allow_pickle=True)['data']
+        else:
+            data_arr = np.load(data_file, allow_pickle=True)
+        
+        print(f"   Loaded {len(data_arr):,} events")
+        
+        # Load snapshot
+        if snapshot_file is None:
+            snapshot_file = "dummy_snapshot.npz"
+        print(f"📂 Loading snapshot from {snapshot_file}...")
+        snapshot_arr = np.load(snapshot_file, allow_pickle=True)['data']
+        
+        # Configure asset with manual data
+        asset = (
+            BacktestAsset()
+                .add_data(data_arr)
+                .initial_snapshot(snapshot_arr)
+                .linear_asset(1.0)
+                .constant_order_latency(10_000_000, 10_000_000)  # 10ms latency
+                .tick_size(0.1)
+                .lot_size(0.01)
+        )
     
     # Initialize Backtest
     hbt = HashMapMarketDepthBacktest([asset])
