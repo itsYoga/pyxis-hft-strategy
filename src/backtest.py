@@ -182,30 +182,20 @@ def run_backtest(data_file, snapshot_file=None, visualize=True, save_report=Fals
     print(f"\nTotal Fees: {fee:>12,.2f}")
     print(f"{'='*50}\n")
     
-    # Visualization
-    if visualize:
+    # Visualization (only show chart if requested)
+    if visualize and not save_report:
         try:
-            from visualization import plot_backtest_results, calculate_metrics, print_metrics_report
+            import matplotlib.pyplot as plt
+            from visualization import plot_backtest_results
             
+            # Simple equity curve for visualization only
             n_points = 100
-            equity_curve = np.linspace(initial_capital, equity, n_points)
-            noise = np.random.randn(n_points) * (abs(pnl) / 20)
-            equity_curve = equity_curve + np.cumsum(noise) - np.cumsum(noise)[-1] * np.linspace(0, 1, n_points)
-            equity_curve[-1] = equity
-            
+            equity_curve = np.linspace(0, pnl, n_points)
             position_curve = np.linspace(0, position, n_points)
             
-            metrics = calculate_metrics(equity_curve, position_curve)
-            print_metrics_report(metrics)
-            
-            if save_report:
-                from visualization import save_report
-                save_report(metrics, equity_curve, position_curve)
-            else:
-                import matplotlib.pyplot as plt
-                fig = plot_backtest_results(equity_curve, position_curve, 
-                                          title=f"Backtest: {os.path.basename(data_file)}")
-                plt.show()
+            fig = plot_backtest_results(equity_curve, position_curve, 
+                                      title=f"Backtest: {os.path.basename(data_file)}")
+            plt.show()
                 
         except ImportError:
             print("Visualization skipped (matplotlib not installed)")

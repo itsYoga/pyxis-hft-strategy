@@ -146,27 +146,27 @@ def print_metrics_report(metrics, title="=== Backtest Performance Report ==="):
     print(title)
     print("=" * 50)
     
-    print(f"\n📊 Capital")
+    print(f"\nCapital")
     print(f"   Initial:      {metrics['initial_capital']:>12,.2f}")
     print(f"   Final:        {metrics['final_equity']:>12,.2f}")
     print(f"   PnL:          {metrics['pnl']:>+12,.2f} ({metrics['pnl_pct']:+.2f}%)")
     
-    print(f"\n📈 Risk Metrics")
+    print(f"\nRisk Metrics")
     print(f"   Sharpe Ratio: {metrics['sharpe_ratio']:>12.2f}")
     print(f"   Max Drawdown: {metrics['max_drawdown_pct']:>12.2f}%")
     print(f"   Win Rate:     {metrics['win_rate_pct']:>12.2f}%")
     
-    print(f"\n📉 Returns")
+    print(f"\nReturns")
     print(f"   Avg Return:   {metrics['avg_return_pct']:>12.4f}%")
     print(f"   Std Dev:      {metrics['return_std_pct']:>12.4f}%")
     
     if 'avg_position' in metrics:
-        print(f"\n📦 Position")
+        print(f"\nPosition")
         print(f"   Avg Position: {metrics['avg_position']:>12.4f}")
         print(f"   Max Long:     {metrics['max_position']:>12.4f}")
         print(f"   Max Short:    {metrics['min_position']:>12.4f}")
     
-    print(f"\n⏱️  Total Steps:  {metrics['total_steps']:>12,}")
+    print(f"\nTotal Steps:  {metrics['total_steps']:>12,}")
     print("=" * 50 + "\n")
 
 
@@ -237,7 +237,7 @@ def save_report(metrics, equity_curve, positions=None, output_dir="reports"):
             else:
                 f.write(f"{key}: {value}\n")
     
-    print(f"📁 Report saved to {output_dir}/")
+    print(f"Report saved to {output_dir}/")
     return f"{output_dir}/backtest_{timestamp}.png"
 
 
