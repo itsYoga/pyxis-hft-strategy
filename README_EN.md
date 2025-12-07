@@ -8,7 +8,7 @@ A High-Frequency Trading (HFT) Market Making framework implementing **HA3 (Hiera
 
 ---
 
-## ✨ New Features (2024-12)
+## ✨ New Features (2025-12)
 
 - **MLOFI** - Multi-Level Order Flow Imbalance (5 levels)
 - **LOB Slope** - Order Book Elasticity
