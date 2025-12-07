@@ -1,28 +1,61 @@
+"""
+OKX Data Recorder for HFTBacktest
+==================================
+Records OKX WebSocket data in hftbacktest-compatible format.
+
+Event codes use hftbacktest constants:
+- EXCH_EVENT = 2147483648
+- DEPTH_EVENT = 1
+- TRADE_EVENT = 2
+- BUY_EVENT = 536870912
+- SELL_EVENT = 268435456
+"""
+
 import asyncio
 import websockets
 import json
 import time
 import numpy as np
 import os
-from datetime import datetime
 
-# HftBacktest constants
-EXCH_EVENT = 1
-LOCAL_EVENT = 2
-DEPTH_EVENT = 4
-TRADE_EVENT = 8
-BUY_EVENT = 16
-SELL_EVENT = 32
+# HftBacktest event constants (must match hftbacktest library)
+EXCH_EVENT = 2147483648       # Exchange event flag
+LOCAL_EVENT = 1073741824      # Local event flag
+DEPTH_EVENT = 1               # Depth update
+TRADE_EVENT = 2               # Trade event
+DEPTH_CLEAR_EVENT = 3         # Clear depth
+DEPTH_SNAPSHOT_EVENT = 4      # Snapshot
+BUY_EVENT = 536870912         # Buy side
+SELL_EVENT = 268435456        # Sell side
+
 
 async def record_okx_stream(inst_id, output_dir):
+    """
+    Record OKX WebSocket stream to files compatible with hftbacktest.
+    
+    Args:
+        inst_id: OKX instrument ID (e.g., "BTC-USDT-SWAP")
+        output_dir: Directory to save data files
+    """
     url = "wss://ws.okx.com:8443/ws/v5/public"
     
-    # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
     
     current_file_ts = int(time.time())
     buffer = []
     BATCH_SIZE = 10000
+    
+    # Data type matching hftbacktest format
+    dtype = np.dtype([
+        ('ev', 'u8'),
+        ('exch_ts', 'i8'),
+        ('local_ts', 'i8'),
+        ('px', 'f8'),
+        ('qty', 'f8'),
+        ('order_id', 'u8'),
+        ('ival', 'i8'),
+        ('fval', 'f8')
+    ])
     
     print(f"Connecting to OKX for {inst_id}...")
     
@@ -41,7 +74,7 @@ async def record_okx_stream(inst_id, output_dir):
         while True:
             try:
                 msg_raw = await ws.recv()
-                local_ts = time.time_ns() # Capture local timestamp immediately
+                local_ts = time.time_ns()
                 
                 msg = json.loads(msg_raw)
                 if 'data' not in msg:
@@ -52,59 +85,47 @@ async def record_okx_stream(inst_id, output_dir):
                 # Process Trades
                 if channel == 'trades':
                     for trade in msg['data']:
-                        exch_ts = int(trade['ts']) * 1_000_000 # ms -> ns
+                        exch_ts = int(trade['ts']) * 1_000_000  # ms -> ns
                         px = float(trade['px'])
                         sz = float(trade['sz'])
-                        side = BUY_EVENT if trade['side'] == 'buy' else SELL_EVENT
                         
-                        # ev, exch_ts, local_ts, px, qty, order_id, ival, fval
-                        ev = EXCH_EVENT | TRADE_EVENT | side
+                        # Correct event code: EXCH | TRADE | SIDE
+                        if trade['side'] == 'buy':
+                            ev = EXCH_EVENT | TRADE_EVENT | BUY_EVENT
+                        else:
+                            ev = EXCH_EVENT | TRADE_EVENT | SELL_EVENT
+                        
                         buffer.append((ev, exch_ts, local_ts, px, sz, 0, 0, 0.0))
 
                 # Process Depth (L2 Incremental)
                 elif channel == 'books-l2-tbt':
-                    exch_ts = int(msg['data']['ts']) * 1_000_000
+                    data = msg['data'][0] if isinstance(msg['data'], list) else msg['data']
+                    exch_ts = int(data['ts']) * 1_000_000
+                    action = data.get('action', 'update')
                     
-                    # Bids
-                    for px, sz, _ in msg['data']['bids']:
-                        ev = EXCH_EVENT | DEPTH_EVENT | BUY_EVENT
-                        buffer.append((ev, exch_ts, local_ts, float(px), float(sz), 0, 0, 0.0))
+                    # Determine event type
+                    if action == 'snapshot':
+                        base_event = EXCH_EVENT | DEPTH_SNAPSHOT_EVENT
+                    else:
+                        base_event = EXCH_EVENT | DEPTH_EVENT
                     
-                    # Asks
-                    for px, sz, _ in msg['data']['asks']:
-                        ev = EXCH_EVENT | DEPTH_EVENT | SELL_EVENT
-                        buffer.append((ev, exch_ts, local_ts, float(px), float(sz), 0, 0, 0.0))
+                    # Process Bids (buy side)
+                    for item in data.get('bids', []):
+                        px = float(item[0])
+                        qty = float(item[1])
+                        ev = base_event | BUY_EVENT
+                        buffer.append((ev, exch_ts, local_ts, px, qty, 0, 0, 0.0))
                     
-                    # Handle initial snapshot specifically if needed, 
-                    # but hftbacktest usually treats the first messages as snapshot if they contain all levels.
-                    # OKX 'action': 'snapshot' vs 'update'
-                    if msg.get('action') == 'snapshot':
-                        print("Received snapshot.")
+                    # Process Asks (sell side)
+                    for item in data.get('asks', []):
+                        px = float(item[0])
+                        qty = float(item[1])
+                        ev = base_event | SELL_EVENT
+                        buffer.append((ev, exch_ts, local_ts, px, qty, 0, 0, 0.0))
 
-                # Write to disk
+                # Write to disk periodically
                 if len(buffer) >= BATCH_SIZE:
-                    # Convert to numpy and save
-                    # We save as raw chunks first, normalization can happen later or here.
-                    # For simplicity/speed, let's just dump the list or a simple array.
-                    # But the plan said "normalize.py" handles conversion. 
-                    # So maybe we just save raw JSON lines? 
-                    # The user prompt example code does conversion in-memory.
-                    # Let's stick to the user's example which converts to numpy immediately.
-                    
-                    # Define dtype
-                    dtype = [
-                        ('ev', 'u8'),
-                        ('exch_ts', 'i8'),
-                        ('local_ts', 'i8'),
-                        ('px', 'f8'),
-                        ('qty', 'f8'),
-                        ('order_id', 'u8'),
-                        ('ival', 'i8'),
-                        ('fval', 'f8')
-                    ]
-                    
                     data_array = np.array(buffer, dtype=dtype)
-                    
                     filename = os.path.join(output_dir, f"okx_{inst_id}_{current_file_ts}.npz")
                     np.savez_compressed(filename, data=data_array)
                     print(f"Saved {len(buffer)} events to {filename}")
@@ -112,23 +133,25 @@ async def record_okx_stream(inst_id, output_dir):
                     buffer.clear()
                     current_file_ts = int(time.time())
 
+            except websockets.exceptions.ConnectionClosed as e:
+                print(f"Connection closed: {e}")
+                break
             except Exception as e:
                 print(f"Error: {e}")
-                # Reconnect logic could go here
-                break
+                continue
+
 
 if __name__ == "__main__":
-    # Example usage
-    # inst_id = "BTC-USDT-SWAP"
-    # output_dir = "data"
-    # asyncio.run(record_okx_stream(inst_id, output_dir))
     import argparse
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Record OKX data for HFTBacktest")
     parser.add_argument("--symbol", type=str, default="BTC-USDT-SWAP", help="OKX Instrument ID")
-    parser.add_argument("--output", type=str, default="data", help="Output directory")
+    parser.add_argument("--output", type=str, default="data/okx", help="Output directory")
     args = parser.parse_args()
+    
+    print(f"Recording {args.symbol} to {args.output}")
+    print("Press Ctrl+C to stop recording")
     
     try:
         asyncio.run(record_okx_stream(args.symbol, args.output))
     except KeyboardInterrupt:
-        print("Recording stopped.")
+        print("\nRecording stopped by user.")
