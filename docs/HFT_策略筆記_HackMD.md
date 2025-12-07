@@ -111,17 +111,42 @@ ls -la data/binance_usdm/
 ./venv/bin/python src/backtest.py src/dummy_data.npy --no-viz
 ```
 
-### 2.4 收集新資料 (OKX)
+### 2.4 錄製 OKX 資料
 
 ```bash
-# 開始錄製 (會持續運行)
+# Step 1: 開始錄製 (建議 30 分鐘以上)
 ./venv/bin/python src/recorder.py --symbol BTC-USDT-SWAP --output data/okx/
 
-# 建議錄製時間:
-# - 測試: 30 分鐘
-# - 正式: 2-4 小時
-# - 完整: 24 小時+
+# Step 2: 按 Ctrl+C 停止錄製
+
+# Step 3: 正規化資料
+./venv/bin/python src/normalize.py --input data/okx/ --output data/okx_btc.npz
+
+# Step 4: 創建快照 (自動)
+./venv/bin/python -c "
+import numpy as np
+data = np.load('data/okx_btc.npz')['data']
+ts = data[0]['exch_ts'] - 1_000_000_000
+px = data[0]['px']
+dtype = [('ev', '<u8'), ('exch_ts', '<i8'), ('local_ts', '<i8'), ('px', '<f8'), ('qty', '<f8'), ('order_id', '<u8'), ('ival', '<i8'), ('fval', '<f8')]
+BID = 2147483648 | 4 | 536870912
+ASK = 2147483648 | 4 | 268435456
+snap = [(BID, ts, ts, px - 0.1*(i+1), 1.0, 0, 0, 0.0) for i in range(100)]
+snap += [(ASK, ts, ts, px + 0.1*(i+1), 1.0, 0, 0, 0.0) for i in range(100)]
+np.savez('data/okx_snapshot.npz', data=np.array(snap, dtype=dtype))
+print(f'Created snapshot at {px}')
+"
+
+# Step 5: 回測
+./venv/bin/python src/backtest.py data/okx_btc.npz --snapshot data/okx_snapshot.npz --no-viz
 ```
+
+**錄製時間建議:**
+| 用途 | 時間 | 事件數 |
+|------|------|--------|
+| 快速測試 | 30 分鐘 | ~200,000 |
+| 正式回測 | 2-4 小時 | ~1,000,000 |
+| 完整驗證 | 24 小時 | ~10,000,000 |
 
 ---
 
