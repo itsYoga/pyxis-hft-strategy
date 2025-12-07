@@ -2,9 +2,19 @@
 
 **中文** | **[English](README_EN.md)**
 
-Pyxis 團隊的高頻交易做市回測框架。
+Pyxis 團隊的高頻交易做市回測框架，實作 **HA3 (層次化自適應 Alpha 架構)**。
 
 ## Team Pyxis - NTUFC 2025
+
+---
+
+## ✨ 新功能 (2024-12)
+
+- **MLOFI** - 多層級訂單流不平衡 (5 層深度)
+- **LOB Slope** - 訂單簿斜率/市場彈性
+- **體制識別** - 基於波動率自動調整策略
+- **River 線上學習** - 動態調整 Alpha 權重
+- **A/B 測試框架** - 評估策略改進
 
 ---
 
@@ -19,6 +29,7 @@ cd pyxis-hft-strategy
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+pip install river  # 線上學習 (可選)
 
 # 3. 用測試資料執行
 cd src
@@ -26,7 +37,11 @@ python generate_dummy.py
 python backtest.py dummy_data.npy
 
 # 4. 用真實 Binance 資料測試 (已內建!)
-python backtest.py ../data/binance_usdm/btcusdt_20240808.gz
+python backtest.py ../data/binance_usdm/btcusdt_20240808.npz \
+    --snapshot ../data/binance_usdm/btcusdt_20240808_eod.npz
+
+# 5. 策略對比測試
+python compare_strategies.py
 ```
 
 ---
@@ -35,21 +50,27 @@ python backtest.py ../data/binance_usdm/btcusdt_20240808.gz
 
 ```
 pyxis-hft-strategy/
-├── src/                  # 核心程式碼
-│   ├── strategy.py       # 你的策略在這裡 - 改這個!
-│   ├── backtest.py       # 回測執行器 (含視覺化)
-│   ├── visualization.py  # 圖表與指標 (新增!)
-│   ├── recorder.py       # OKX 資料收集
-│   ├── normalize.py      # 資料處理
-│   └── generate_dummy.py # 測試資料生成
+├── src/                       # 核心程式碼
+│   ├── strategy.py            # ⭐ HA3 策略 (MLOFI + Regime)
+│   ├── strategy_baseline.py   # 原始策略 (對照組)
+│   ├── backtest.py            # 回測執行器 (含視覺化)
+│   ├── compare_strategies.py  # 策略對比測試
+│   ├── online_learning.py     # River 線上學習
+│   ├── ab_testing.py          # A/B 測試框架
+│   ├── reconciliation.py      # 對賬機制
+│   ├── visualization.py       # 圖表與指標
+│   ├── recorder.py            # OKX 資料收集
+│   ├── normalize.py           # 資料處理
+│   ├── live_trading.py        # 即時交易
+│   └── generate_dummy.py      # 測試資料生成
 │
-├── data/                 # 市場資料
-│   ├── binance_usdm/     # Binance 合約 (BTC, ETH)
-│   ├── binance_spot/     # Binance 現貨
-│   └── bybit/            # Bybit 資料
+├── data/                      # 市場資料
+│   ├── binance_usdm/          # ✓ Binance 合約 (BTC, ETH)
+│   ├── binance_spot/          # Binance 現貨
+│   └── bybit/                 # Bybit 資料
 │
-├── notebooks/            # 21 個教程 notebooks!
-└── docs/                 # 文檔
+├── notebooks/                 # 21 個教程 notebooks!
+└── docs/                      # 文檔
 ```
 
 ---
@@ -109,7 +130,7 @@ cd src
 # 修改 backtest.py 來 import 你的策略:
 # from my_strategy import my_strategy
 
-python backtest.py ../data/binance_usdm/btcusdt_20240808.gz
+python backtest.py ../data/binance_usdm/btcusdt_20240808.npz
 ```
 
 ### 步驟 3: 查看視覺化結果
@@ -124,25 +145,73 @@ python backtest.py ../data/binance_usdm/btcusdt_20240808.gz
 
 ---
 
-## 可用的 Alpha 信號
+## Alpha 訊號
 
-### 1. Order Book Imbalance (OBI) - 訂單簿失衡
+### Level 1 (基礎)
+
+#### 1. Order Book Imbalance (OBI) - 訂單簿失衡
 ```python
 imbalance = (bid_qty - ask_qty) / (bid_qty + ask_qty)
 # > 0: 買壓大，價格可能上漲
 # < 0: 賣壓大，價格可能下跌
 ```
 
-### 2. Micro Price - 微觀價格
+#### 2. Micro Price - 微觀價格
 ```python
 micro_price = (bid * ask_qty + ask * bid_qty) / (bid_qty + ask_qty)
 # 比簡單中間價更準確的公平價格
 ```
 
-### 3. Trade Flow - 成交流
+#### 3. Trade Flow - 成交流
 ```python
 flow = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 # 最近交易方向
+```
+
+### Level 2 (進階 - HA3)
+
+| 訊號 | 說明 |
+|------|------|
+| **MLOFI** | 5 層訂單流不平衡 |
+| **LOB Slope** | 訂單簿彈性 |
+| **EPI** | 預期價格衝擊 (MLOFI/Slope) |
+
+---
+
+## 策略對比測試
+
+```bash
+# 運行對比測試
+python src/compare_strategies.py
+
+# 結果範例:
+# ============================================================
+# STRATEGY COMPARISON REPORT
+# ============================================================
+# Baseline PnL: +1,120.95
+# HA3 PnL:        +427.00
+# Improvement:    -61.91%
+# Winner:         Baseline
+```
+
+---
+
+## River 線上學習
+
+```python
+from online_learning import OnlineAlphaLearner, AlphaSignals
+
+learner = OnlineAlphaLearner(learning_rate=0.01)
+
+# 每個 timestep
+signals = AlphaSignals(micro_price_alpha=0.5, mlofi_alpha=0.8, ...)
+learner.observe(signals)
+weights = learner.get_weights()
+```
+
+**評估 River 效果:**
+```bash
+python src/ab_testing.py
 ```
 
 ---
@@ -205,6 +274,10 @@ python live_trading.py
 | **網格交易** | `High-Frequency Grid Trading.ipynb` |
 | **隊列位置** | `Queue-Based Market Making in Large Tick Size Assets.ipynb` |
 | **多資產** | `Making Multiple Markets.ipynb` |
+| **APT Alpha** | `Market Making with Alpha - APT.ipynb` |
+| **Basis Alpha** | `Market Making with Alpha - Basis.ipynb` |
+| **GLFT 模型** | `GLFT Market Making Model and Grid Trading.ipynb` |
+| **延遲影響** | `Impact of Order Latency.ipynb` |
 
 ---
 
@@ -237,6 +310,7 @@ python recorder.py --symbol BTC-USDT-SWAP --output data/
 ## 參考資源
 
 - [hftbacktest 文檔](https://hftbacktest.readthedocs.io/)
+- [River ML](https://riverml.xyz/)
 - [Avellaneda-Stoikov 論文](https://math.nyu.edu/~avellane/HighFrequencyTrading.pdf)
 - [101 Formulaic Alphas](https://arxiv.org/abs/1601.00991)
 - [OKX API](https://www.okx.com/docs-v5/en/)

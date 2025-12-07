@@ -2,9 +2,19 @@
 
 **[中文版](README.md)** | **English**
 
-A High-Frequency Trading (HFT) Market Making backtesting framework for team Pyxis.
+A High-Frequency Trading (HFT) Market Making framework implementing **HA3 (Hierarchical Adaptive Alpha Architecture)**.
 
 ## Team Pyxis - NTUFC 2025
+
+---
+
+## ✨ New Features (2024-12)
+
+- **MLOFI** - Multi-Level Order Flow Imbalance (5 levels)
+- **LOB Slope** - Order Book Elasticity
+- **Regime Detection** - Auto-adjust strategy based on volatility
+- **River Online Learning** - Dynamic alpha weight adjustment
+- **A/B Testing Framework** - Evaluate strategy improvements
 
 ---
 
@@ -19,6 +29,7 @@ cd pyxis-hft-strategy
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+pip install river  # Online learning (optional)
 
 # 3. Test with sample data
 cd src
@@ -26,7 +37,11 @@ python generate_dummy.py
 python backtest.py dummy_data.npy
 
 # 4. Test with real Binance data (included!)
-python backtest.py ../data/binance_usdm/btcusdt_20240808.gz
+python backtest.py ../data/binance_usdm/btcusdt_20240808.npz \
+    --snapshot ../data/binance_usdm/btcusdt_20240808_eod.npz
+
+# 5. Strategy comparison test
+python compare_strategies.py
 ```
 
 ---
@@ -35,21 +50,27 @@ python backtest.py ../data/binance_usdm/btcusdt_20240808.gz
 
 ```
 pyxis-hft-strategy/
-├── src/                  # Core code
-│   ├── strategy.py       # YOUR STRATEGY HERE - Modify this!
-│   ├── backtest.py       # Backtest runner (with visualization)
-│   ├── visualization.py  # Charts & metrics (NEW!)
-│   ├── recorder.py       # OKX data collector
-│   ├── normalize.py      # Data processing
-│   └── generate_dummy.py # Test data generator
+├── src/                       # Core code
+│   ├── strategy.py            # ⭐ HA3 Strategy (MLOFI + Regime)
+│   ├── strategy_baseline.py   # Original baseline for comparison
+│   ├── backtest.py            # Backtest runner (with visualization)
+│   ├── compare_strategies.py  # Strategy comparison test
+│   ├── online_learning.py     # River online learning
+│   ├── ab_testing.py          # A/B testing framework
+│   ├── reconciliation.py      # Trade reconciliation
+│   ├── visualization.py       # Charts & metrics
+│   ├── recorder.py            # OKX data collector
+│   ├── normalize.py           # Data processing
+│   ├── live_trading.py        # Live trading
+│   └── generate_dummy.py      # Test data generator
 │
-├── data/                 # Market data
-│   ├── binance_usdm/     # Binance Futures (BTC, ETH)
-│   ├── binance_spot/     # Binance Spot
-│   └── bybit/            # Bybit data
+├── data/                      # Market data
+│   ├── binance_usdm/          # ✓ Binance Futures (BTC, ETH)
+│   ├── binance_spot/          # Binance Spot
+│   └── bybit/                 # Bybit data
 │
-├── notebooks/            # 21 tutorial notebooks!
-└── docs/                 # Documentation
+├── notebooks/                 # 21 tutorial notebooks!
+└── docs/                      # Documentation
 ```
 
 ---
@@ -109,7 +130,7 @@ cd src
 # Edit backtest.py to import your strategy:
 # from my_strategy import my_strategy
 
-python backtest.py ../data/binance_usdm/btcusdt_20240808.gz
+python backtest.py ../data/binance_usdm/btcusdt_20240808.npz
 ```
 
 ### Step 3: View results with visualization
@@ -124,25 +145,73 @@ python backtest.py ../data/binance_usdm/btcusdt_20240808.gz
 
 ---
 
-## Available Alpha Signals
+## Alpha Signals
 
-### 1. Order Book Imbalance (OBI)
+### Level 1 (Basic)
+
+#### 1. Order Book Imbalance (OBI)
 ```python
 imbalance = (bid_qty - ask_qty) / (bid_qty + ask_qty)
 # > 0: Buy pressure, price may go up
 # < 0: Sell pressure, price may go down
 ```
 
-### 2. Micro Price
+#### 2. Micro Price
 ```python
 micro_price = (bid * ask_qty + ask * bid_qty) / (bid_qty + ask_qty)
 # More accurate fair price than simple mid
 ```
 
-### 3. Trade Flow
+#### 3. Trade Flow
 ```python
 flow = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 # Recent trade direction
+```
+
+### Level 2 (Advanced - HA3)
+
+| Signal | Description |
+|--------|-------------|
+| **MLOFI** | 5-level order flow imbalance |
+| **LOB Slope** | Order book elasticity |
+| **EPI** | Expected Price Impact (MLOFI/Slope) |
+
+---
+
+## Strategy Comparison
+
+```bash
+# Run comparison test
+python src/compare_strategies.py
+
+# Sample output:
+# ============================================================
+# STRATEGY COMPARISON REPORT
+# ============================================================
+# Baseline PnL: +1,120.95
+# HA3 PnL:        +427.00
+# Improvement:    -61.91%
+# Winner:         Baseline
+```
+
+---
+
+## River Online Learning
+
+```python
+from online_learning import OnlineAlphaLearner, AlphaSignals
+
+learner = OnlineAlphaLearner(learning_rate=0.01)
+
+# Each timestep
+signals = AlphaSignals(micro_price_alpha=0.5, mlofi_alpha=0.8, ...)
+learner.observe(signals)
+weights = learner.get_weights()
+```
+
+**Evaluate River effectiveness:**
+```bash
+python src/ab_testing.py
 ```
 
 ---
@@ -178,6 +247,24 @@ python backtest.py data.npz -s snapshot.npz # Custom snapshot
 
 ---
 
+## Live Trading (OKX Demo)
+
+```bash
+cd src
+
+# 1. Setup API (copy .env.example and fill in your API)
+cp ../.env.example ../.env
+# Edit .env with your OKX Demo Trading API Key/Secret/Passphrase
+
+# 2. Test connection
+python live_trading.py --test
+
+# 3. Start trading (12/15 start)
+python live_trading.py
+```
+
+---
+
 ## Notebooks (21 Tutorials!)
 
 | Topic | Notebook |
@@ -187,6 +274,10 @@ python backtest.py data.npz -s snapshot.npz # Custom snapshot
 | **Grid Trading** | `High-Frequency Grid Trading.ipynb` |
 | **Queue Position** | `Queue-Based Market Making in Large Tick Size Assets.ipynb` |
 | **Multi-Asset** | `Making Multiple Markets.ipynb` |
+| **APT Alpha** | `Market Making with Alpha - APT.ipynb` |
+| **Basis Alpha** | `Market Making with Alpha - Basis.ipynb` |
+| **GLFT Model** | `GLFT Market Making Model and Grid Trading.ipynb` |
+| **Latency Impact** | `Impact of Order Latency.ipynb` |
 
 ---
 
@@ -219,6 +310,7 @@ python recorder.py --symbol BTC-USDT-SWAP --output data/
 ## References
 
 - [hftbacktest Documentation](https://hftbacktest.readthedocs.io/)
+- [River ML](https://riverml.xyz/)
 - [Avellaneda-Stoikov Paper](https://math.nyu.edu/~avellane/HighFrequencyTrading.pdf)
 - [101 Formulaic Alphas](https://arxiv.org/abs/1601.00991)
 - [OKX API](https://www.okx.com/docs-v5/en/)
