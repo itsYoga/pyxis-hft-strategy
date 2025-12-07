@@ -3,71 +3,63 @@ import numpy as np
 from hftbacktest import GTX, LIMIT, BUY, SELL
 
 """
-HA3 (Hierarchical Adaptive Alpha Architecture) Market Making Strategy
-=====================================================================
+HA4 (Hierarchical Adaptive Alpha Architecture - Aggressive)
+============================================================
 
-Enhanced Alpha Signals based on 2024-2025 HFT research:
-1. Multi-Level Order Flow Imbalance (MLOFI) - captures hidden liquidity
-2. LOB Slope - measures market elasticity/resilience
-3. Volatility-Adaptive Spread - protects against adverse selection
-4. Regime Detection - adjusts strategy based on market conditions
+Key optimizations from HA3:
+1. Lower risk aversion (gamma 0.1 → 0.05)
+2. Higher alpha trust in volatile regimes (0.5 → 1.5)
+3. Tighter spreads in volatile regimes (1.5x → 1.1x)
+4. No position limit reduction in volatile regimes
+5. Asymmetric "Hunt" logic - tighten side aligned with alpha
+6. Non-linear alpha boost for extreme imbalances
+7. Capped slope adjustment (max 1.2x)
+
+Philosophy: "You must be in the market to make money"
+- Prioritize fill rate over per-trade margin
+- Trust alpha signals, especially during volatility
+- Maximize inventory turnover, not minimize risk
 """
 
 
 @njit
 def market_making_algo(hbt, stat):
     """
-    HA3 Market Making Strategy
+    HA4 Aggressive Market Making Strategy
     
-    Alpha Signals:
-    1. Micro Price - BBO quantity-weighted price
-    2. Multi-Level OFI - aggregated across 5 levels
-    3. LOB Slope - order book elasticity
-    
-    Regime Detection:
-    - Uses volatility ratio to detect calm/active/volatile regimes
-    - Adjusts spread and alpha weights dynamically
-    
-    stat array layout:
-    [0] = current bid order id
-    [1] = current bid price
-    [2] = current ask order id
-    [3] = current ask price
-    [4] = step counter
-    [5] = prev_best_bid
-    [6] = prev_best_ask
-    [7] = prev_bid_qty
-    [8] = prev_ask_qty
-    [9] = cumulative_ofi
+    Optimization targets:
+    - Higher trade frequency (fill rate)
+    - Larger inventory tolerance
+    - Alpha-driven asymmetric quotes
     """
     asset_no = 0
     tick_size = hbt.depth(asset_no).tick_size
     
     # ========================================
-    # Strategy Parameters (HA3 Optimized)
+    # HA4 Aggressive Parameters
     # ========================================
     
-    # Avellaneda-Stoikov Base Parameters
-    gamma_base = 0.1          # Base risk aversion
-    k_base = 1.5              # Base spread elasticity
+    # Lower risk aversion - allow inventory swings
+    gamma_base = 0.05           # Was 0.1 in HA3
+    k_base = 1.5
     
-    # Alpha Weights
-    micro_weight = 0.3        # Micro price alpha weight
-    mlofi_weight = 0.5        # Multi-level OFI weight
-    slope_weight = 0.2        # LOB Slope weight (EPI component)
+    # Higher alpha weights - trust the signals
+    micro_weight = 0.2          # Reduced (OFI is more important)
+    mlofi_weight = 0.8          # Was 0.5 - OFI is primary predictor
+    slope_weight = 0.0          # Disable EPI (causes double penalty)
     
-    # Multi-level depth parameters
-    num_levels = 5            # Analyze top 5 price levels
-    ofi_decay = 0.7           # Exponential decay for deeper levels
+    # Multi-level depth
+    num_levels = 5
+    ofi_decay = 0.7
     
-    # Volatility & Regime
-    window_size = 500         # Volatility window (faster adaptation)
-    base_volatility = tick_size * 5  # Reference volatility for regime
-    vol_smoothing = 0.1       # EWMA smoothing factor
+    # Volatility
+    window_size = 500
+    base_volatility = tick_size * 5
+    vol_smoothing = 0.1
     
-    # Order management
+    # Order management - NO REDUCTION in volatile regime
     order_qty = 1.0
-    max_position = 10.0
+    max_position = 10.0         # Always 10, never reduced
     
     # ========================================
     # State Variables
@@ -77,11 +69,9 @@ def market_making_algo(hbt, stat):
     is_buffer_full = False
     step_count = 0
     
-    # EWMA volatility (more responsive)
     ewma_volatility = tick_size * 10
     ewma_slope = 1.0
     
-    # Previous state for OFI delta calculation
     prev_bid_prices = np.zeros(num_levels, dtype=np.float64)
     prev_ask_prices = np.zeros(num_levels, dtype=np.float64)
     prev_bid_qtys = np.zeros(num_levels, dtype=np.float64)
@@ -89,7 +79,7 @@ def market_making_algo(hbt, stat):
     prev_initialized = False
     
     # ========================================
-    # Main Event Loop (100ms per step)
+    # Main Event Loop
     # ========================================
     while True:
         ret = hbt.elapse(100_000_000)  # 100ms
@@ -98,11 +88,9 @@ def market_making_algo(hbt, stat):
             break
         
         step_count += 1
-        
-        # 1. Clear inactive orders
         hbt.clear_inactive_orders(asset_no)
         
-        # 2. Get Market Data
+        # Get Market Data
         depth = hbt.depth(asset_no)
         if depth.best_bid == 0 or depth.best_ask == 0:
             continue
@@ -117,10 +105,9 @@ def market_making_algo(hbt, stat):
         best_ask_qty = depth.best_ask_qty
         
         mid_price = (best_bid + best_ask) / 2.0
-        spread = best_ask - best_bid
         
         # ========================================
-        # 3. Alpha 1: Micro Price (Level 1)
+        # Alpha 1: Micro Price
         # ========================================
         if best_bid_qty + best_ask_qty > 0:
             micro_price = (
@@ -132,73 +119,60 @@ def market_making_algo(hbt, stat):
         alpha_micro = (micro_price - mid_price) / tick_size
         
         # ========================================
-        # 4. Alpha 2: Multi-Level OFI (MLOFI)
+        # Alpha 2: Multi-Level OFI (MLOFI)
         # ========================================
-        # Collect multi-level depth data
         bid_qtys = np.zeros(num_levels, dtype=np.float64)
         ask_qtys = np.zeros(num_levels, dtype=np.float64)
         bid_prices = np.zeros(num_levels, dtype=np.float64)
         ask_prices = np.zeros(num_levels, dtype=np.float64)
         
-        # Get quantities at each level (using tick-based access)
         for i in range(num_levels):
             bid_tick = best_bid_tick - i
             ask_tick = best_ask_tick + i
-            
             bid_prices[i] = bid_tick * tick_size
             ask_prices[i] = ask_tick * tick_size
             bid_qtys[i] = depth.bid_qty_at_tick(bid_tick)
             ask_qtys[i] = depth.ask_qty_at_tick(ask_tick)
         
-        # Calculate MLOFI with exponential decay weights
         mlofi = 0.0
         total_weight = 0.0
         
         if prev_initialized:
             for i in range(num_levels):
-                weight = ofi_decay ** i  # Level 1 has weight 1.0, Level 5 has weight ~0.24
+                weight = ofi_decay ** i
                 
-                # Delta calculation for this level
                 delta_bid = 0.0
                 delta_ask = 0.0
                 
-                # Price improvement/decay logic (simplified for numba)
                 if bid_prices[i] > prev_bid_prices[i]:
-                    # Price improved - full qty contribution
                     delta_bid = bid_qtys[i]
                 elif bid_prices[i] < prev_bid_prices[i]:
-                    # Price decayed - negative contribution
                     delta_bid = -prev_bid_qtys[i]
                 else:
-                    # Same price - quantity change
                     delta_bid = bid_qtys[i] - prev_bid_qtys[i]
                 
                 if ask_prices[i] < prev_ask_prices[i]:
-                    # Ask improved - full qty contribution (negative for asks)
                     delta_ask = ask_qtys[i]
                 elif ask_prices[i] > prev_ask_prices[i]:
-                    # Ask decayed
                     delta_ask = -prev_ask_qtys[i]
                 else:
                     delta_ask = ask_qtys[i] - prev_ask_qtys[i]
                 
-                # Net imbalance: positive = buy pressure
                 mlofi += weight * (delta_bid - delta_ask)
                 total_weight += weight
         
-        # Normalize MLOFI
         if total_weight > 0:
             mlofi = mlofi / total_weight
         
-        # Normalize by average level 1 quantity for comparability
         avg_l1_qty = (best_bid_qty + best_ask_qty) / 2.0
         if avg_l1_qty > 0:
             mlofi_normalized = mlofi / avg_l1_qty
         else:
             mlofi_normalized = 0.0
         
-        # Clip extreme values
-        mlofi_normalized = max(-2.0, min(2.0, mlofi_normalized))
+        # HA4: NO CLIPPING - allow extreme signals
+        # Only soft clip to prevent numerical issues
+        mlofi_normalized = max(-5.0, min(5.0, mlofi_normalized))
         
         # Update previous state
         for i in range(num_levels):
@@ -209,12 +183,8 @@ def market_making_algo(hbt, stat):
         prev_initialized = True
         
         # ========================================
-        # 5. Alpha 3: LOB Slope (Market Elasticity)
+        # LOB Slope (for regime only, not for spread)
         # ========================================
-        # Slope = how quickly depth accumulates away from mid
-        # High slope = thick book = mean reversion
-        # Low slope = thin book = momentum
-        
         cumulative_bid = 0.0
         cumulative_ask = 0.0
         slope_bid_sum = 0.0
@@ -224,16 +194,12 @@ def market_making_algo(hbt, stat):
         for i in range(num_levels):
             cumulative_bid += bid_qtys[i]
             cumulative_ask += ask_qtys[i]
-            
-            # Price distance from mid (in ticks)
-            dist_bid = (i + 1)  # Level 1 = 1 tick, etc.
-            dist_ask = (i + 1)
-            
-            if cumulative_bid > 0 and dist_bid > 0:
-                slope_bid_sum += np.log(cumulative_bid + 1) / dist_bid
+            dist = (i + 1)
+            if cumulative_bid > 0 and dist > 0:
+                slope_bid_sum += np.log(cumulative_bid + 1) / dist
                 valid_levels += 1
-            if cumulative_ask > 0 and dist_ask > 0:
-                slope_ask_sum += np.log(cumulative_ask + 1) / dist_ask
+            if cumulative_ask > 0 and dist > 0:
+                slope_ask_sum += np.log(cumulative_ask + 1) / dist
                 valid_levels += 1
         
         if valid_levels > 0:
@@ -241,11 +207,10 @@ def market_making_algo(hbt, stat):
         else:
             current_slope = 1.0
         
-        # EWMA smoothing for slope
         ewma_slope = vol_smoothing * current_slope + (1 - vol_smoothing) * ewma_slope
         
         # ========================================
-        # 6. Update Volatility (EWMA)
+        # Volatility (EWMA)
         # ========================================
         mid_price_buffer[buffer_idx] = mid_price
         buffer_idx += 1
@@ -263,90 +228,104 @@ def market_making_algo(hbt, stat):
         volatility = max(ewma_volatility, tick_size)
         
         # ========================================
-        # 7. Regime Detection (Volatility-Based)
+        # HA4 Regime Detection (Aggressive)
         # ========================================
         vol_ratio = volatility / base_volatility
         
-        # Regime adjustments
+        # HA4: TRUST ALPHA MORE in volatility, NOT LESS
         if vol_ratio < 1.0:
-            # Calm regime - tighter spread, trust alpha signals
-            regime_spread_mult = 0.8
-            regime_alpha_mult = 1.2
-            regime_gamma = gamma_base * 0.8
-        elif vol_ratio < 2.0:
-            # Active regime - normal parameters
+            # Calm - normal operation
             regime_spread_mult = 1.0
             regime_alpha_mult = 1.0
             regime_gamma = gamma_base
+        elif vol_ratio < 2.0:
+            # Active - slightly tighter, trust alpha
+            regime_spread_mult = 0.95
+            regime_alpha_mult = 1.2
+            regime_gamma = gamma_base
         else:
-            # Volatile regime - wider spread, reduce alpha reliance
-            regime_spread_mult = 1.5
-            regime_alpha_mult = 0.5
-            regime_gamma = gamma_base * 1.5
+            # Volatile - HA4 AGGRESSIVE: tight spread, high alpha trust
+            regime_spread_mult = 1.1       # Was 1.5 - stay competitive
+            regime_alpha_mult = 1.5        # Was 0.5 - TRUST THE SIGNAL
+            regime_gamma = gamma_base * 1.2  # Slightly more skew for protection
         
         # ========================================
-        # 8. Expected Price Impact (EPI)
+        # Non-Linear Alpha Boost (Extreme Imbalances)
         # ========================================
-        # EPI = Force / Mass = OFI / Slope
-        if ewma_slope > 0.001:
-            epi = mlofi_normalized / ewma_slope
-        else:
-            epi = mlofi_normalized
-        
-        epi = max(-3.0, min(3.0, epi))  # Clip
+        alpha_boost = 1.0
+        if abs(mlofi_normalized) > 1.5:
+            alpha_boost = 2.0  # Double signal for extreme OFI
+        elif abs(mlofi_normalized) > 1.0:
+            alpha_boost = 1.5
         
         # ========================================
-        # 9. Combined Alpha Signal
+        # Combined Alpha Signal
         # ========================================
-        forecast = regime_alpha_mult * (
+        forecast = regime_alpha_mult * alpha_boost * (
             micro_weight * alpha_micro +
-            mlofi_weight * mlofi_normalized +
-            slope_weight * epi
+            mlofi_weight * mlofi_normalized
+            # slope_weight removed - no EPI double penalty
         )
         
         # ========================================
-        # 10. Reservation Price (AS + Alpha)
+        # Reservation Price
         # ========================================
         position = hbt.position(asset_no)
         
         reservation_price = (
             mid_price 
-            + forecast * tick_size              # Alpha adjustment
-            - position * regime_gamma * (volatility ** 2)  # Inventory risk
+            + forecast * tick_size
+            - position * regime_gamma * (volatility ** 2)
         )
         
         # ========================================
-        # 11. Dynamic Spread Calculation
+        # HA4: Asymmetric "Hunt" Logic
         # ========================================
+        # If alpha is bullish, tighten bid (to buy), widen ask (to sell higher)
+        # If alpha is bearish, tighten ask (to sell), widen bid (to buy lower)
+        
         half_spread_base = (2.0 / regime_gamma) * np.log(1.0 + regime_gamma / k_base) / 2.0
         half_spread = half_spread_base * regime_spread_mult
         
-        # Additional spread adjustment based on slope
-        # Thin book -> wider spread for protection
-        slope_adjustment = 1.0 / max(0.5, ewma_slope)
-        half_spread *= min(1.5, max(0.8, slope_adjustment))
+        # HA4: Capped slope adjustment (max 1.2x)
+        if ewma_slope > 0.001:
+            slope_adjustment = 1.0 / ewma_slope
+            slope_adjustment = min(1.2, max(0.8, slope_adjustment))
+        else:
+            slope_adjustment = 1.0
+        
+        half_spread *= slope_adjustment
+        
+        # Asymmetric spread based on alpha direction
+        if forecast > 0.5:  # Bullish
+            bid_spread_mult = 0.8   # Tighten bid to buy
+            ask_spread_mult = 1.2   # Widen ask to sell higher
+        elif forecast < -0.5:  # Bearish
+            bid_spread_mult = 1.2   # Widen bid to buy lower
+            ask_spread_mult = 0.8   # Tighten ask to sell
+        else:  # Neutral
+            bid_spread_mult = 1.0
+            ask_spread_mult = 1.0
         
         # Inventory skew
         skew = 0.2 * position / max_position if max_position > 0 else 0.0
         
-        bid_price = reservation_price - half_spread * (1 + skew)
-        ask_price = reservation_price + half_spread * (1 - skew)
+        bid_price = reservation_price - half_spread * bid_spread_mult * (1 + skew)
+        ask_price = reservation_price + half_spread * ask_spread_mult * (1 - skew)
         
-        # Quantize to tick size
+        # Quantize
         bid_price_tick = round(bid_price / tick_size) * tick_size
         ask_price_tick = round(ask_price / tick_size) * tick_size
         
-        # Don't cross the spread
         if bid_price_tick >= ask_price_tick:
             bid_price_tick = mid_price - tick_size
             ask_price_tick = mid_price + tick_size
         
-        # Stay within market
         bid_price_tick = min(bid_price_tick, best_bid)
         ask_price_tick = max(ask_price_tick, best_ask)
         
         # ========================================
-        # 12. Order Management
+        # Order Management
         # ========================================
         if stat[0] > 0:
             hbt.cancel(asset_no, int(stat[0]), False)
@@ -359,26 +338,17 @@ def market_making_algo(hbt, stat):
         if new_bid_id == new_ask_id:
             new_ask_id += 1
         
-        # ========================================
-        # 13. Position Limits with Regime Adjustment
-        # ========================================
-        # In volatile regime, reduce max position
-        effective_max_pos = max_position
-        if vol_ratio >= 2.0:
-            effective_max_pos = max_position * 0.5
-        
-        can_buy = position < effective_max_pos
-        can_sell = position > -effective_max_pos
+        # HA4: NO position reduction in volatile regime
+        can_buy = position < max_position
+        can_sell = position > -max_position
         
         if can_buy:
             hbt.submit_buy_order(asset_no, new_bid_id, bid_price_tick, order_qty, GTX, LIMIT, False)
         if can_sell:
             hbt.submit_sell_order(asset_no, new_ask_id, ask_price_tick, order_qty, GTX, LIMIT, False)
         
-        # Update state
         stat[0] = new_bid_id
         stat[1] = bid_price_tick
         stat[2] = new_ask_id
         stat[3] = ask_price_tick
         stat[4] = step_count
-
