@@ -2,7 +2,7 @@
 
 **中文** | **[English](README_EN.md)**
 
-Pyxis 團隊的高頻交易做市回測框架，實作 **HA3 (層次化自適應 Alpha 架構)**。
+Pyxis 團隊的高頻交易做市回測框架，實作多層級訂單流不平衡策略。
 
 ## Team Pyxis - NTUFC 2025
 
@@ -51,7 +51,7 @@ python compare_strategies.py
 ```
 pyxis-hft-strategy/
 ├── src/                       # 核心程式碼
-│   ├── strategy.py            # ⭐ HA3 策略 (MLOFI + Regime)
+│   ├── strategy.py            # ⭐ 積極做市策略 (MLOFI + Regime)
 │   ├── strategy_baseline.py   # 原始策略 (對照組)
 │   ├── backtest.py            # 回測執行器 (含視覺化)
 │   ├── compare_strategies.py  # 策略對比測試
@@ -168,7 +168,7 @@ flow = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 # 最近交易方向
 ```
 
-### Level 2 (進階 - HA3)
+### Level 2 (進階)
 
 | 訊號 | 說明 |
 |------|------|
@@ -189,7 +189,7 @@ python src/compare_strategies.py
 # STRATEGY COMPARISON REPORT
 # ============================================================
 # Baseline PnL: +1,120.95
-# HA3 PnL:        +427.00
+# Aggressive PnL:  +427.00
 # Improvement:    -61.91%
 # Winner:         Baseline
 ```

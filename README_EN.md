@@ -2,7 +2,7 @@
 
 **[中文版](README.md)** | **English**
 
-A High-Frequency Trading (HFT) Market Making framework implementing **HA3 (Hierarchical Adaptive Alpha Architecture)**.
+A High-Frequency Trading (HFT) Market Making framework implementing multi-level order flow imbalance strategies.
 
 ## Team Pyxis - NTUFC 2025
 
@@ -51,7 +51,7 @@ python compare_strategies.py
 ```
 pyxis-hft-strategy/
 ├── src/                       # Core code
-│   ├── strategy.py            # ⭐ HA3 Strategy (MLOFI + Regime)
+│   ├── strategy.py            # ⭐ Aggressive Strategy (MLOFI + Regime)
 │   ├── strategy_baseline.py   # Original baseline for comparison
 │   ├── backtest.py            # Backtest runner (with visualization)
 │   ├── compare_strategies.py  # Strategy comparison test
@@ -168,7 +168,7 @@ flow = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 # Recent trade direction
 ```
 
-### Level 2 (Advanced - HA3)
+### Level 2 (Advanced)
 
 | Signal | Description |
 |--------|-------------|
@@ -189,7 +189,7 @@ python src/compare_strategies.py
 # STRATEGY COMPARISON REPORT
 # ============================================================
 # Baseline PnL: +1,120.95
-# HA3 PnL:        +427.00
+# Aggressive PnL:  +427.00
 # Improvement:    -61.91%
 # Winner:         Baseline
 ```

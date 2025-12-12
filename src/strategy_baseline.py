@@ -8,7 +8,7 @@ def market_making_algo(hbt, stat):
     BASELINE Market Making Strategy (Original)
     Only uses Level 1 data: Micro Price + BBO Imbalance
     
-    For comparison with HA3 strategy.
+    For comparison with aggressive strategy.
     """
     asset_no = 0
     tick_size = hbt.depth(asset_no).tick_size

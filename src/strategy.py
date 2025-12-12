@@ -3,13 +3,13 @@ import numpy as np
 from hftbacktest import GTX, LIMIT, BUY, SELL
 
 """
-HA4 (Hierarchical Adaptive Alpha Architecture - Aggressive)
-============================================================
+Aggressive Market Making Strategy
+==================================
 
-Key optimizations from HA3:
-1. Lower risk aversion (gamma 0.1 → 0.05)
-2. Higher alpha trust in volatile regimes (0.5 → 1.5)
-3. Tighter spreads in volatile regimes (1.5x → 1.1x)
+Key features:
+1. Lower risk aversion (gamma 0.05)
+2. Higher alpha trust in volatile regimes (1.5x)
+3. Tighter spreads in volatile regimes (1.1x)
 4. No position limit reduction in volatile regimes
 5. Asymmetric "Hunt" logic - tighten side aligned with alpha
 6. Non-linear alpha boost for extreme imbalances
@@ -23,24 +23,36 @@ Philosophy: "You must be in the market to make money"
 
 
 @njit
-def market_making_algo(hbt, stat):
+def market_making_algo(hbt, stat, recorder=None):
     """
-    HA4 Aggressive Market Making Strategy
+    Aggressive Market Making Strategy
     
     Optimization targets:
     - Higher trade frequency (fill rate)
     - Larger inventory tolerance
     - Alpha-driven asymmetric quotes
+    
+    Args:
+        hbt: Backtest engine
+        stat: State array for tracking orders
+        recorder: Optional recorder for data collection (recorder.recorder from Recorder class)
     """
     asset_no = 0
     tick_size = hbt.depth(asset_no).tick_size
     
+    # Record initial state if recorder is provided
+    if recorder is not None:
+        try:
+            recorder.record(hbt)
+        except:
+            pass  # Ignore recording errors
+    
     # ========================================
-    # HA4 Aggressive Parameters
+    # Aggressive Parameters
     # ========================================
     
     # Lower risk aversion - allow inventory swings
-    gamma_base = 0.05           # Was 0.1 in HA3
+    gamma_base = 0.05
     k_base = 1.5
     
     # Higher alpha weights - trust the signals
@@ -81,19 +93,36 @@ def market_making_algo(hbt, stat):
     # ========================================
     # Main Event Loop
     # ========================================
-    while True:
+    max_steps = 1_000_000  # Safety limit: prevent infinite loops
+    consecutive_empty_depth = 0
+    max_empty_depth = 100  # If depth is empty for 100 consecutive steps, exit
+    
+    while step_count < max_steps:
         ret = hbt.elapse(100_000_000)  # 100ms
         if ret != 0:
-            print("Elapse returned:", ret)
+            # Data ended (ret == 1) or error occurred
             break
         
         step_count += 1
         hbt.clear_inactive_orders(asset_no)
         
+        # Record data periodically if recorder is provided (every 100 steps)
+        if recorder is not None and step_count % 100 == 0:
+            try:
+                recorder.record(hbt)
+            except:
+                pass  # Ignore recording errors
+        
         # Get Market Data
         depth = hbt.depth(asset_no)
         if depth.best_bid == 0 or depth.best_ask == 0:
+            consecutive_empty_depth += 1
+            if consecutive_empty_depth >= max_empty_depth:
+                # Data likely ended, exit loop
+                break
             continue
+        else:
+            consecutive_empty_depth = 0  # Reset counter when depth is valid
         if np.isnan(depth.best_bid) or np.isnan(depth.best_ask):
             continue
         
@@ -170,7 +199,7 @@ def market_making_algo(hbt, stat):
         else:
             mlofi_normalized = 0.0
         
-        # HA4: NO CLIPPING - allow extreme signals
+        # NO CLIPPING - allow extreme signals
         # Only soft clip to prevent numerical issues
         mlofi_normalized = max(-5.0, min(5.0, mlofi_normalized))
         
@@ -228,11 +257,11 @@ def market_making_algo(hbt, stat):
         volatility = max(ewma_volatility, tick_size)
         
         # ========================================
-        # HA4 Regime Detection (Aggressive)
+        # Regime Detection (Aggressive)
         # ========================================
         vol_ratio = volatility / base_volatility
         
-        # HA4: TRUST ALPHA MORE in volatility, NOT LESS
+        # TRUST ALPHA MORE in volatility, NOT LESS
         if vol_ratio < 1.0:
             # Calm - normal operation
             regime_spread_mult = 1.0
@@ -244,9 +273,9 @@ def market_making_algo(hbt, stat):
             regime_alpha_mult = 1.2
             regime_gamma = gamma_base
         else:
-            # Volatile - HA4 AGGRESSIVE: tight spread, high alpha trust
-            regime_spread_mult = 1.1       # Was 1.5 - stay competitive
-            regime_alpha_mult = 1.5        # Was 0.5 - TRUST THE SIGNAL
+            # Volatile - AGGRESSIVE: tight spread, high alpha trust
+            regime_spread_mult = 1.1       # Stay competitive
+            regime_alpha_mult = 1.5        # TRUST THE SIGNAL
             regime_gamma = gamma_base * 1.2  # Slightly more skew for protection
         
         # ========================================
@@ -279,7 +308,7 @@ def market_making_algo(hbt, stat):
         )
         
         # ========================================
-        # HA4: Asymmetric "Hunt" Logic
+        # Asymmetric "Hunt" Logic
         # ========================================
         # If alpha is bullish, tighten bid (to buy), widen ask (to sell higher)
         # If alpha is bearish, tighten ask (to sell), widen bid (to buy lower)
@@ -287,7 +316,7 @@ def market_making_algo(hbt, stat):
         half_spread_base = (2.0 / regime_gamma) * np.log(1.0 + regime_gamma / k_base) / 2.0
         half_spread = half_spread_base * regime_spread_mult
         
-        # HA4: Capped slope adjustment (max 1.2x)
+        # Capped slope adjustment (max 1.2x)
         if ewma_slope > 0.001:
             slope_adjustment = 1.0 / ewma_slope
             slope_adjustment = min(1.2, max(0.8, slope_adjustment))
@@ -338,7 +367,7 @@ def market_making_algo(hbt, stat):
         if new_bid_id == new_ask_id:
             new_ask_id += 1
         
-        # HA4: NO position reduction in volatile regime
+        # NO position reduction in volatile regime
         can_buy = position < max_position
         can_sell = position > -max_position
         
