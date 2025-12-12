@@ -1,5 +1,7 @@
 import numpy as np
 import sys
+import os
+from pathlib import Path
 from hftbacktest import (
     event_dtype,
     EXCH_EVENT,
@@ -95,8 +97,12 @@ def generate_dummy_data(filename):
         snapshot_events.append((ev, ts, ts, mid_price + (i+1)*0.1, 1.0, 0, 0, 0.0))
         
     snapshot_data = np.array(snapshot_events, dtype=dtype)
-    np.savez_compressed("dummy_snapshot.npz", data=snapshot_data)
-    print(f"Generated snapshot to dummy_snapshot.npz")
+    # Save to data directory
+    data_dir = Path(__file__).parent.parent.parent / "data"
+    data_dir.mkdir(exist_ok=True)
+    snapshot_path = data_dir / "dummy_snapshot.npz"
+    np.savez_compressed(str(snapshot_path), data=snapshot_data)
+    print(f"Generated snapshot to {snapshot_path}")
 
     for i in range(1000):
         ts = start_ts + (i+1) * 10_000_000 # 10ms intervals
@@ -122,9 +128,11 @@ def generate_dummy_data(filename):
             events.append((ev, ts, ts, px, 0.1, 0, 0, 0.0))
             
     data = np.array(events, dtype=dtype)
-    # Save as npy
-    filename_npy = filename.replace(".npz", ".npy")
-    np.save(filename_npy, data)
+    # Save as npy to data directory
+    data_dir = Path(__file__).parent.parent.parent / "data"
+    data_dir.mkdir(exist_ok=True)
+    filename_npy = data_dir / "dummy_data.npy"
+    np.save(str(filename_npy), data)
     print(f"Generated {len(data)} events to {filename_npy}")
 
 if __name__ == "__main__":

@@ -13,16 +13,16 @@ from typing import Dict, List, Optional
 import numpy as np
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from .backtest import run_backtest
-    from .config_loader import load_config
-    from .logger import get_logger
+    from ..core.backtest import run_backtest
+    from ..core.config_loader import load_config
+    from ..utils.logger import get_logger
 except ImportError:
-    from backtest import run_backtest
-    from config_loader import load_config
-    from logger import get_logger
+    from core.backtest import run_backtest
+    from core.config_loader import load_config
+    from utils.logger import get_logger
 
 logger = get_logger(__name__)
 

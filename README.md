@@ -15,6 +15,7 @@ Pyxis 團隊的高頻交易做市回測框架，實作多層級訂單流不平�
 - **體制識別** - 基於波動率自動調整策略
 - **River 線上學習** - 動態調整 Alpha 權重
 - **A/B 測試框架** - 評估策略改進
+- **模組化重組** - 清晰的目錄結構，提升可維護性
 
 ---
 
@@ -32,16 +33,15 @@ pip install -r requirements.txt
 pip install river  # 線上學習 (可選)
 
 # 3. 用測試資料執行
-cd src
-python generate_dummy.py
-python backtest.py dummy_data.npy
+python src/scripts/generate_dummy.py
+python src/core/backtest.py data/dummy_data.npy
 
 # 4. 用真實 Binance 資料測試 (已內建!)
-python backtest.py ../data/binance_usdm/btcusdt_20240808.npz \
-    --snapshot ../data/binance_usdm/btcusdt_20240808_eod.npz
+python src/core/backtest.py data/binance_usdm/btcusdt_20240808.npz \
+    --snapshot data/binance_usdm/btcusdt_20240808_eod.npz
 
 # 5. 策略對比測試
-python compare_strategies.py
+python src/tests/compare_strategies.py
 ```
 
 ---
@@ -51,23 +51,41 @@ python compare_strategies.py
 ```
 pyxis-hft-strategy/
 ├── src/                       # 核心程式碼
-│   ├── strategy.py            # ⭐ 積極做市策略 (MLOFI + Regime)
-│   ├── strategy_baseline.py   # 原始策略 (對照組)
-│   ├── backtest.py            # 回測執行器 (含視覺化)
-│   ├── compare_strategies.py  # 策略對比測試
-│   ├── online_learning.py     # River 線上學習
-│   ├── ab_testing.py          # A/B 測試框架
-│   ├── reconciliation.py      # 對賬機制
-│   ├── visualization.py       # 圖表與指標
-│   ├── recorder.py            # OKX 資料收集
-│   ├── normalize.py           # 資料處理
-│   ├── live_trading.py        # 即時交易
-│   └── generate_dummy.py      # 測試資料生成
+│   ├── strategies/            # 策略實現
+│   │   ├── aggressive.py     # ⭐ 積極做市策略 (MLOFI + Regime)
+│   │   └── baseline.py        # 原始策略 (對照組)
+│   │
+│   ├── core/                  # 核心功能
+│   │   ├── backtest.py        # 回測執行器 (含視覺化)
+│   │   ├── data_loader.py     # 資料載入器
+│   │   └── config_loader.py   # 配置載入器
+│   │
+│   ├── utils/                 # 工具類
+│   │   ├── logger.py          # 日誌系統
+│   │   ├── visualization.py   # 圖表與指標
+│   │   ├── result_viewer.py   # 結果展示器
+│   │   └── reconciliation.py # 對賬機制
+│   │
+│   ├── scripts/               # 可執行腳本
+│   │   ├── recorder.py        # OKX 資料收集
+│   │   ├── normalize.py       # 資料處理
+│   │   ├── generate_dummy.py  # 測試資料生成
+│   │   └── live_trading.py    # 即時交易
+│   │
+│   ├── learning/              # 線上學習
+│   │   ├── online_learning.py # River 線上學習
+│   │   └── ab_testing.py      # A/B 測試框架
+│   │
+│   └── tests/                 # 測試文件
+│       ├── compare_strategies.py  # 策略對比測試
+│       └── ...
 │
 ├── data/                      # 市場資料
 │   ├── binance_usdm/          # ✓ Binance 合約 (BTC, ETH)
 │   ├── binance_spot/          # Binance 現貨
-│   └── bybit/                 # Bybit 資料
+│   ├── bybit/                 # Bybit 資料
+│   ├── dummy_data.npy         # 測試資料
+│   └── dummy_snapshot.npz     # 測試快照
 │
 ├── notebooks/                 # 21 個教程 notebooks!
 └── docs/                      # 文檔
@@ -80,13 +98,13 @@ pyxis-hft-strategy/
 ### 步驟 1: 建立你的策略檔案
 
 ```python
-# src/my_strategy.py
+# src/strategies/my_strategy.py
 from numba import njit
 import numpy as np
 from hftbacktest import GTX, LIMIT
 
 @njit
-def my_strategy(hbt, stat):
+def market_making_algo(hbt, stat):
     """
     你的自訂策略!
     
@@ -125,12 +143,10 @@ def my_strategy(hbt, stat):
 ### 步驟 2: 執行回測
 
 ```bash
-cd src
+# 修改 src/core/backtest.py 來 import 你的策略:
+# from strategies.my_strategy import market_making_algo
 
-# 修改 backtest.py 來 import 你的策略:
-# from my_strategy import my_strategy
-
-python backtest.py ../data/binance_usdm/btcusdt_20240808.npz
+python src/core/backtest.py data/binance_usdm/btcusdt_20240808.npz
 ```
 
 ### 步驟 3: 查看視覺化結果
@@ -182,7 +198,7 @@ flow = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 
 ```bash
 # 運行對比測試
-python src/compare_strategies.py
+python src/tests/compare_strategies.py
 
 # 結果範例:
 # ============================================================
@@ -199,7 +215,7 @@ python src/compare_strategies.py
 ## River 線上學習
 
 ```python
-from online_learning import OnlineAlphaLearner, AlphaSignals
+from learning.online_learning import OnlineAlphaLearner, AlphaSignals
 
 learner = OnlineAlphaLearner(learning_rate=0.01)
 
@@ -211,7 +227,7 @@ weights = learner.get_weights()
 
 **評估 River 效果:**
 ```bash
-python src/ab_testing.py
+python src/learning/ab_testing.py
 ```
 
 ---
@@ -219,16 +235,14 @@ python src/ab_testing.py
 ## 收集 OKX 真實資料
 
 ```bash
-cd src
-
 # 開始錄製 (1-2 小時後 Ctrl+C 停止)
-python recorder.py --symbol BTC-USDT-SWAP --output ../data/okx/
+python src/scripts/recorder.py --symbol BTC-USDT-SWAP --output data/okx/
 
 # 正規化資料
-python normalize.py --input ../data/okx/ --output ../data/okx_btc.npz
+python src/scripts/normalize.py --input data/okx/ --output data/okx_btc.npz
 
 # 用真實資料回測
-python backtest.py ../data/okx_btc.npz
+python src/core/backtest.py data/okx_btc.npz
 ```
 
 ---
@@ -237,12 +251,12 @@ python backtest.py ../data/okx_btc.npz
 
 ```bash
 # 基本執行
-python backtest.py <data_file>
+python src/core/backtest.py <data_file>
 
 # 進階選項
-python backtest.py data.npz --no-viz        # 不顯示視覺化
-python backtest.py data.npz --save          # 儲存報告
-python backtest.py data.npz -s snapshot.npz # 自訂快照
+python src/core/backtest.py data.npz --no-viz        # 不顯示視覺化
+python src/core/backtest.py data.npz --save          # 儲存報告
+python src/core/backtest.py data.npz -s snapshot.npz # 自訂快照
 ```
 
 ---
@@ -250,17 +264,15 @@ python backtest.py data.npz -s snapshot.npz # 自訂快照
 ## Live Trading (OKX Demo)
 
 ```bash
-cd src
-
 # 1. 設定 API (複製 .env.example 並填入你的 API)
-cp ../.env.example ../.env
+cp .env.example .env
 # 編輯 .env 填入 OKX Demo Trading API Key/Secret/Passphrase
 
 # 2. 測試連線
-python live_trading.py --test
+python src/scripts/live_trading.py --test
 
-# 3. 啟動交易 (12/15 開始)
-python live_trading.py
+# 3. 啟動交易
+python src/scripts/live_trading.py
 ```
 
 ---
@@ -290,7 +302,7 @@ python live_trading.py
 ```bash
 # 在雲端伺服器
 tmux new -s recorder
-python recorder.py --symbol BTC-USDT-SWAP --output data/
+python src/scripts/recorder.py --symbol BTC-USDT-SWAP --output data/
 # Ctrl+B 然後 D 離開
 ```
 

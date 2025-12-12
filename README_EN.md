@@ -15,6 +15,7 @@ A High-Frequency Trading (HFT) Market Making framework implementing multi-level 
 - **Regime Detection** - Auto-adjust strategy based on volatility
 - **River Online Learning** - Dynamic alpha weight adjustment
 - **A/B Testing Framework** - Evaluate strategy improvements
+- **Modular Refactoring** - Clean directory structure for better maintainability
 
 ---
 
@@ -32,16 +33,15 @@ pip install -r requirements.txt
 pip install river  # Online learning (optional)
 
 # 3. Test with sample data
-cd src
-python generate_dummy.py
-python backtest.py dummy_data.npy
+python src/scripts/generate_dummy.py
+python src/core/backtest.py data/dummy_data.npy
 
 # 4. Test with real Binance data (included!)
-python backtest.py ../data/binance_usdm/btcusdt_20240808.npz \
-    --snapshot ../data/binance_usdm/btcusdt_20240808_eod.npz
+python src/core/backtest.py data/binance_usdm/btcusdt_20240808.npz \
+    --snapshot data/binance_usdm/btcusdt_20240808_eod.npz
 
 # 5. Strategy comparison test
-python compare_strategies.py
+python src/tests/compare_strategies.py
 ```
 
 ---
@@ -51,23 +51,41 @@ python compare_strategies.py
 ```
 pyxis-hft-strategy/
 ├── src/                       # Core code
-│   ├── strategy.py            # ⭐ Aggressive Strategy (MLOFI + Regime)
-│   ├── strategy_baseline.py   # Original baseline for comparison
-│   ├── backtest.py            # Backtest runner (with visualization)
-│   ├── compare_strategies.py  # Strategy comparison test
-│   ├── online_learning.py     # River online learning
-│   ├── ab_testing.py          # A/B testing framework
-│   ├── reconciliation.py      # Trade reconciliation
-│   ├── visualization.py       # Charts & metrics
-│   ├── recorder.py            # OKX data collector
-│   ├── normalize.py           # Data processing
-│   ├── live_trading.py        # Live trading
-│   └── generate_dummy.py      # Test data generator
+│   ├── strategies/            # Strategy implementations
+│   │   ├── aggressive.py     # ⭐ Aggressive Strategy (MLOFI + Regime)
+│   │   └── baseline.py        # Original baseline for comparison
+│   │
+│   ├── core/                  # Core functionality
+│   │   ├── backtest.py        # Backtest runner (with visualization)
+│   │   ├── data_loader.py     # Data loader
+│   │   └── config_loader.py   # Configuration loader
+│   │
+│   ├── utils/                 # Utility modules
+│   │   ├── logger.py          # Logging system
+│   │   ├── visualization.py   # Charts & metrics
+│   │   ├── result_viewer.py   # Result viewer
+│   │   └── reconciliation.py  # Trade reconciliation
+│   │
+│   ├── scripts/               # Executable scripts
+│   │   ├── recorder.py        # OKX data collector
+│   │   ├── normalize.py       # Data processing
+│   │   ├── generate_dummy.py  # Test data generator
+│   │   └── live_trading.py    # Live trading
+│   │
+│   ├── learning/              # Online learning
+│   │   ├── online_learning.py # River online learning
+│   │   └── ab_testing.py      # A/B testing framework
+│   │
+│   └── tests/                 # Test files
+│       ├── compare_strategies.py  # Strategy comparison test
+│       └── ...
 │
 ├── data/                      # Market data
 │   ├── binance_usdm/          # ✓ Binance Futures (BTC, ETH)
 │   ├── binance_spot/          # Binance Spot
-│   └── bybit/                 # Bybit data
+│   ├── bybit/                 # Bybit data
+│   ├── dummy_data.npy         # Test data
+│   └── dummy_snapshot.npz     # Test snapshot
 │
 ├── notebooks/                 # 21 tutorial notebooks!
 └── docs/                      # Documentation
@@ -80,13 +98,13 @@ pyxis-hft-strategy/
 ### Step 1: Create your strategy file
 
 ```python
-# src/my_strategy.py
+# src/strategies/my_strategy.py
 from numba import njit
 import numpy as np
 from hftbacktest import GTX, LIMIT
 
 @njit
-def my_strategy(hbt, stat):
+def market_making_algo(hbt, stat):
     """
     Your custom strategy here!
     
@@ -125,12 +143,10 @@ def my_strategy(hbt, stat):
 ### Step 2: Run backtest
 
 ```bash
-cd src
+# Edit src/core/backtest.py to import your strategy:
+# from strategies.my_strategy import market_making_algo
 
-# Edit backtest.py to import your strategy:
-# from my_strategy import my_strategy
-
-python backtest.py ../data/binance_usdm/btcusdt_20240808.npz
+python src/core/backtest.py data/binance_usdm/btcusdt_20240808.npz
 ```
 
 ### Step 3: View results with visualization
@@ -182,7 +198,7 @@ flow = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 
 ```bash
 # Run comparison test
-python src/compare_strategies.py
+python src/tests/compare_strategies.py
 
 # Sample output:
 # ============================================================
@@ -199,7 +215,7 @@ python src/compare_strategies.py
 ## River Online Learning
 
 ```python
-from online_learning import OnlineAlphaLearner, AlphaSignals
+from learning.online_learning import OnlineAlphaLearner, AlphaSignals
 
 learner = OnlineAlphaLearner(learning_rate=0.01)
 
@@ -211,7 +227,7 @@ weights = learner.get_weights()
 
 **Evaluate River effectiveness:**
 ```bash
-python src/ab_testing.py
+python src/learning/ab_testing.py
 ```
 
 ---
@@ -219,16 +235,14 @@ python src/ab_testing.py
 ## Collect OKX Real Data
 
 ```bash
-cd src
-
 # Start recording (Ctrl+C to stop after 1-2 hours)
-python recorder.py --symbol BTC-USDT-SWAP --output ../data/okx/
+python src/scripts/recorder.py --symbol BTC-USDT-SWAP --output data/okx/
 
 # Normalize data
-python normalize.py --input ../data/okx/ --output ../data/okx_btc.npz
+python src/scripts/normalize.py --input data/okx/ --output data/okx_btc.npz
 
 # Backtest with real data
-python backtest.py ../data/okx_btc.npz
+python src/core/backtest.py data/okx_btc.npz
 ```
 
 ---
@@ -237,12 +251,12 @@ python backtest.py ../data/okx_btc.npz
 
 ```bash
 # Basic run
-python backtest.py <data_file>
+python src/core/backtest.py <data_file>
 
 # With options
-python backtest.py data.npz --no-viz        # No visualization
-python backtest.py data.npz --save          # Save report to file
-python backtest.py data.npz -s snapshot.npz # Custom snapshot
+python src/core/backtest.py data.npz --no-viz        # No visualization
+python src/core/backtest.py data.npz --save          # Save report to file
+python src/core/backtest.py data.npz -s snapshot.npz # Custom snapshot
 ```
 
 ---
@@ -250,17 +264,15 @@ python backtest.py data.npz -s snapshot.npz # Custom snapshot
 ## Live Trading (OKX Demo)
 
 ```bash
-cd src
-
 # 1. Setup API (copy .env.example and fill in your API)
-cp ../.env.example ../.env
+cp .env.example .env
 # Edit .env with your OKX Demo Trading API Key/Secret/Passphrase
 
 # 2. Test connection
-python live_trading.py --test
+python src/scripts/live_trading.py --test
 
-# 3. Start trading (12/15 start)
-python live_trading.py
+# 3. Start trading
+python src/scripts/live_trading.py
 ```
 
 ---
@@ -290,7 +302,7 @@ python live_trading.py
 ```bash
 # On cloud server
 tmux new -s recorder
-python recorder.py --symbol BTC-USDT-SWAP --output data/
+python src/scripts/recorder.py --symbol BTC-USDT-SWAP --output data/
 # Ctrl+B then D to detach
 ```
 

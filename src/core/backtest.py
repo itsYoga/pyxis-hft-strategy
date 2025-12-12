@@ -15,24 +15,26 @@ from datetime import datetime
 from hftbacktest import HashMapMarketDepthBacktest, Recorder
 
 # Import strategy - can be changed to test different strategies
-from strategy import market_making_algo
+import sys
+from pathlib import Path
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from strategies.aggressive import market_making_algo
 
 # Import new modules
 try:
     # Try relative imports first (when used as module)
     from .data_loader import create_asset, validate_data_file
     from .config_loader import load_config, ConfigLoader
-    from .logger import setup_logger, get_logger
-    from .result_viewer import ResultViewer
+    from ..utils.logger import setup_logger, get_logger
+    from ..utils.result_viewer import ResultViewer
 except ImportError:
     # Fall back to absolute imports (when run as script)
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent))
-    from data_loader import create_asset, validate_data_file
-    from config_loader import load_config, ConfigLoader
-    from logger import setup_logger, get_logger
-    from result_viewer import ResultViewer
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from core.data_loader import create_asset, validate_data_file
+    from core.config_loader import load_config, ConfigLoader
+    from utils.logger import setup_logger, get_logger
+    from utils.result_viewer import ResultViewer
 
 # 設置日誌（會在載入配置後重新配置）
 logger = get_logger(__name__)

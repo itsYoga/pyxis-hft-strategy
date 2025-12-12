@@ -13,9 +13,12 @@ from hftbacktest.data.utils.binancefutures import convert
 from hftbacktest.data.utils.snapshot import create_last_snapshot
 
 try:
-    from .logger import get_logger
+    from ..utils.logger import get_logger
 except ImportError:
-    from logger import get_logger
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from utils.logger import get_logger
 
 logger = get_logger(__name__)
 

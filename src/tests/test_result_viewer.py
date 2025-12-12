@@ -6,9 +6,10 @@ Test Result Viewer
 
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from result_viewer import ResultViewer, create_simple_report
+from utils.result_viewer import ResultViewer, create_simple_report
 import numpy as np
 
 def test_result_viewer():

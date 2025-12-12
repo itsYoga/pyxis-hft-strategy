@@ -11,17 +11,17 @@ import os
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hftbacktest import HashMapMarketDepthBacktest
 
 # Import new modules
 try:
-    from .data_loader import create_asset, validate_data_file
-    from .logger import setup_logger, get_logger
+    from ..core.data_loader import create_asset, validate_data_file
+    from ..utils.logger import setup_logger, get_logger
 except ImportError:
-    from data_loader import create_asset, validate_data_file
-    from logger import setup_logger, get_logger
+    from core.data_loader import create_asset, validate_data_file
+    from utils.logger import setup_logger, get_logger
 
 logger = get_logger(__name__)
 
@@ -35,7 +35,10 @@ def run_strategy(strategy_func, data_file, snapshot_file, strategy_name, backtes
         
         # Use default config if not provided
         if backtest_config is None:
-            from config_loader import BacktestConfig
+            try:
+                from ..core.config_loader import BacktestConfig
+            except ImportError:
+                from core.config_loader import BacktestConfig
             backtest_config = BacktestConfig(
                 tick_size=0.1,
                 lot_size=0.001,
@@ -166,7 +169,7 @@ def main():
     data_files = [
         ("../data/binance_usdm/btcusdt_20240808.npz", "../data/binance_usdm/btcusdt_20240808_eod.npz", "Binance BTCUSDT 2024-08-08"),
         ("../data/binance_usdm/btcusdt_20240809.npz", "../data/binance_usdm/btcusdt_20240809_eod.npz", "Binance BTCUSDT 2024-08-09"),
-        ("dummy_data.npy", "dummy_snapshot.npz", "Dummy Data"),
+        ("../../data/dummy_data.npy", "../../data/dummy_snapshot.npz", "Dummy Data"),
     ]
     
     # Find available data
@@ -189,15 +192,22 @@ def main():
     
     # Load backtest config
     try:
-        from config_loader import load_config
+        try:
+            from ..core.config_loader import load_config
+        except ImportError:
+            from core.config_loader import load_config
         _, backtest_config, _ = load_config()
     except FileNotFoundError:
         logger.warning("Config file not found, using defaults")
         backtest_config = None
     
     # Import strategies
-    from strategy_baseline import market_making_algo as baseline_algo
-    from strategy import market_making_algo as aggressive_algo
+    try:
+        from ..strategies.baseline import market_making_algo as baseline_algo
+        from ..strategies.aggressive import market_making_algo as aggressive_algo
+    except ImportError:
+        from strategies.baseline import market_making_algo as baseline_algo
+        from strategies.aggressive import market_making_algo as aggressive_algo
     
     # Run baseline
     logger.info("\nRunning Baseline strategy...")

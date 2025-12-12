@@ -6,7 +6,8 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def test_imports():
     """測試模組導入"""
@@ -15,28 +16,28 @@ def test_imports():
     print("=" * 60)
     
     try:
-        from config_loader import load_config, ConfigLoader
+        from core.config_loader import load_config, ConfigLoader
         print("✓ config_loader 導入成功")
     except Exception as e:
         print(f"✗ config_loader 導入失敗: {e}")
         return False
     
     try:
-        from data_loader import create_asset, validate_data_file
+        from core.data_loader import create_asset, validate_data_file
         print("✓ data_loader 導入成功")
     except Exception as e:
         print(f"✗ data_loader 導入失敗: {e}")
         return False
     
     try:
-        from logger import setup_logger, get_logger
+        from utils.logger import setup_logger, get_logger
         print("✓ logger 導入成功")
     except Exception as e:
         print(f"✗ logger 導入失敗: {e}")
         return False
     
     try:
-        from result_viewer import ResultViewer, create_simple_report
+        from utils.result_viewer import ResultViewer, create_simple_report
         print("✓ result_viewer 導入成功")
     except Exception as e:
         print(f"✗ result_viewer 導入失敗: {e}")
@@ -52,7 +53,7 @@ def test_config_loader():
     print("=" * 60)
     
     try:
-        from config_loader import load_config
+        from core.config_loader import load_config
         
         # 嘗試載入配置
         try:
@@ -86,7 +87,7 @@ def test_logger():
     print("=" * 60)
     
     try:
-        from logger import setup_logger, get_logger
+        from utils.logger import setup_logger, get_logger
         
         logger = setup_logger('test', console=True, level='INFO')
         logger.info("這是一條測試日誌訊息")
@@ -106,7 +107,7 @@ def test_result_viewer():
     
     try:
         import numpy as np
-        from result_viewer import ResultViewer
+        from utils.result_viewer import ResultViewer
         
         viewer = ResultViewer(tick_size=0.1)
         
@@ -140,10 +141,10 @@ def test_data_loader():
     print("=" * 60)
     
     try:
-        from data_loader import validate_data_file
+        from core.data_loader import validate_data_file
         
         # 測試檔案驗證
-        dummy_file = os.path.join(os.path.dirname(__file__), 'dummy_data.npy')
+        dummy_file = os.path.join(os.path.dirname(__file__), '../../data/dummy_data.npy')
         if os.path.exists(dummy_file):
             validate_data_file(dummy_file)
             print(f"✓ 資料檔案驗證成功: {dummy_file}")

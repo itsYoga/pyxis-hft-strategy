@@ -180,7 +180,10 @@ def quick_ab_test(
     Returns:
         ABTestResult
     """
-    from online_learning import OnlineAlphaLearner, AlphaSignals
+    try:
+        from .online_learning import OnlineAlphaLearner, AlphaSignals
+    except ImportError:
+        from online_learning import OnlineAlphaLearner, AlphaSignals
     
     if baseline_weights is None:
         baseline_weights = {'micro': 0.3, 'mlofi': 0.5, 'slope': 0.2}

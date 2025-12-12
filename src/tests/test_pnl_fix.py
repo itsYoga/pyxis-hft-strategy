@@ -6,10 +6,11 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from backtest import run_backtest
-from logger import setup_logger
+from core.backtest import run_backtest
+from utils.logger import setup_logger
 
 logger = setup_logger('test_pnl', console=True)
 
@@ -21,8 +22,8 @@ def test_pnl_calculation():
     
     # 使用 dummy 數據測試
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_file = os.path.join(script_dir, "dummy_data.npy")
-    snapshot_file = os.path.join(script_dir, "dummy_snapshot.npz")
+    data_file = os.path.join(script_dir, "../../data/dummy_data.npy")
+    snapshot_file = os.path.join(script_dir, "../../data/dummy_snapshot.npz")
     
     if not os.path.exists(data_file) or not os.path.exists(snapshot_file):
         print(f"❌ 測試數據文件不存在")
