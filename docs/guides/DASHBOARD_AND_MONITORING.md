@@ -6,7 +6,7 @@
 
 ---
 
-## 🖥️ 本地 Web 儀表板
+## 本地 Web 儀表板
 
 ### 快速開始
 
@@ -33,7 +33,7 @@ python src/utils/dashboard.py
 
 ---
 
-## ☁️ 雲端部署和監控
+## 雲端部署和監控
 
 ### 選項 1: 使用 Flask + 雲端服務
 
@@ -116,7 +116,7 @@ streamlit run src/utils/streamlit_dashboard.py
 
 ---
 
-## 📊 監控工具推薦
+## 監控工具推薦
 
 ### 1. Grafana（推薦）
 
@@ -160,7 +160,7 @@ docker run -d -p 3000:3000 grafana/grafana
 
 ---
 
-## 🔔 告警設置
+## 告警設置
 
 ### 使用 Python 發送告警
 
@@ -195,7 +195,7 @@ def send_slack_alert(message):
 
 ---
 
-## 📱 移動端監控
+## 移動端監控
 
 ### 使用 Grafana Mobile App
 
@@ -218,7 +218,7 @@ def send_update(message):
 
 ---
 
-## 🚀 部署建議
+## 部署建議
 
 ### 雲端服務器選擇
 
@@ -287,7 +287,7 @@ def send_update(message):
 
 ---
 
-## 📈 監控指標
+## 監控指標
 
 ### 關鍵指標
 
@@ -318,7 +318,7 @@ def send_update(message):
 
 ---
 
-## 🔧 故障排除
+## 故障排除
 
 ### 問題 1: 儀表板無法訪問
 
@@ -336,7 +336,7 @@ def send_update(message):
 
 ---
 
-## 📚 相關文檔
+## 相關文檔
 
 - [下單和記錄指南](TRADING_AND_LOGGING.md)
 - [OKX 模擬交易指南](OKX_SIMULATED_TRADING.md)

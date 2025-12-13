@@ -1,39 +1,32 @@
 """
-Strategy Comparison Test
-========================
-Compare baseline vs aggressive strategies.
+測試保守版本策略
+================
+
+比較 Aggressive 和 Conservative 版本的策略表現
 """
 
-import numpy as np
-import time
 import sys
-import os
+import time
 from pathlib import Path
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from core.data_loader import create_asset, validate_data_file
+from core.config_loader import load_config
+from utils.logger import get_logger
 from hftbacktest import HashMapMarketDepthBacktest
-
-# Import new modules
-try:
-    from ..core.data_loader import create_asset, validate_data_file
-    from ..utils.logger import setup_logger, get_logger
-except ImportError:
-    from core.data_loader import create_asset, validate_data_file
-    from utils.logger import setup_logger, get_logger
+import numpy as np
 
 logger = get_logger(__name__)
 
 
 def run_strategy(strategy_func, data_file, snapshot_file, strategy_name, backtest_config=None):
-    """Run a strategy and return results"""
+    """運行策略並返回結果"""
     
     try:
-        # Validate data file
         validate_data_file(data_file)
         
-        # Use default config if not provided
         if backtest_config is None:
             try:
                 from ..core.config_loader import BacktestConfig
@@ -50,7 +43,6 @@ def run_strategy(strategy_func, data_file, snapshot_file, strategy_name, backtes
                 partial_fill=False
             )
         
-        # Load data using unified loader
         asset = create_asset(
             data_file=data_file,
             snapshot_file=snapshot_file,
@@ -65,7 +57,7 @@ def run_strategy(strategy_func, data_file, snapshot_file, strategy_name, backtes
         hbt = HashMapMarketDepthBacktest([asset])
         stat = np.zeros(20, dtype=np.float64)
         
-        # Get initial state BEFORE running strategy
+        # Get initial state
         initial_stat_val = hbt.state_values(0)
         initial_balance = initial_stat_val.balance
         initial_position = initial_stat_val.position
@@ -80,7 +72,7 @@ def run_strategy(strategy_func, data_file, snapshot_file, strategy_name, backtes
         initial_equity = initial_balance + initial_position * initial_mid_price * backtest_config.contract_size - initial_fee
         
         logger.info(f"Running {strategy_name} strategy...")
-        logger.info("This may take a few seconds to process all market data...")
+        logger.info("This may take a few seconds...")
         start_time = time.time()
         
         try:
@@ -106,7 +98,6 @@ def run_strategy(strategy_func, data_file, snapshot_file, strategy_name, backtes
         
         equity_wo_fee = balance + position * mid_price * backtest_config.contract_size
         equity = equity_wo_fee - fee
-        # PnL = current equity - initial equity (not initial_capital)
         pnl = equity - initial_equity
         
         return {
@@ -126,78 +117,74 @@ def run_strategy(strategy_func, data_file, snapshot_file, strategy_name, backtes
         raise
 
 
-def print_comparison(baseline_result, aggressive_result):
-    """Print comparison report"""
+def print_comparison(aggressive_result, conservative_result):
+    """打印對比報告"""
     
-    baseline_pnl = baseline_result['pnl']
     aggressive_pnl = aggressive_result['pnl']
+    conservative_pnl = conservative_result['pnl']
     
-    if baseline_pnl != 0:
-        improvement = (aggressive_pnl - baseline_pnl) / abs(baseline_pnl) * 100
+    if aggressive_pnl != 0:
+        improvement = (conservative_pnl - aggressive_pnl) / abs(aggressive_pnl) * 100
     else:
-        improvement = 0 if aggressive_pnl == 0 else float('inf')
+        improvement = 0 if conservative_pnl == 0 else float('inf')
     
-    winner = "Aggressive" if aggressive_pnl > baseline_pnl else "Baseline"
+    winner = "Conservative" if conservative_pnl > aggressive_pnl else "Aggressive"
     
-    logger.info("\n" + "=" * 60)
-    logger.info("STRATEGY COMPARISON REPORT")
-    logger.info("=" * 60)
-    
-    logger.info("\n" + "-" * 60)
-    logger.info("BASELINE (Original - Level 1 Only)")
-    logger.info("-" * 60)
-    logger.info(f"   Balance:      {baseline_result['balance']:>15,.2f}")
-    logger.info(f"   Position:     {baseline_result['position']:>15,.4f}")
-    logger.info(f"   Equity:       {baseline_result['equity']:>15,.2f}")
-    logger.info(f"   PnL:          {baseline_result['pnl']:>+15,.2f}")
-    logger.info(f"   Time:         {baseline_result['elapsed']:>15.2f}s")
-    
-    logger.info("\n" + "-" * 60)
-    logger.info("AGGRESSIVE (Multi-Level OFI + Regime Detection)")
-    logger.info("-" * 60)
-    logger.info(f"   Balance:      {aggressive_result['balance']:>15,.2f}")
-    logger.info(f"   Position:     {aggressive_result['position']:>15,.4f}")
-    logger.info(f"   Equity:       {aggressive_result['equity']:>15,.2f}")
-    logger.info(f"   PnL:          {aggressive_result['pnl']:>+15,.2f}")
-    logger.info(f"   Time:         {aggressive_result['elapsed']:>15.2f}s")
-    
-    logger.info("\n" + "=" * 60)
+    logger.info("\n" + "="*60)
+    logger.info("STRATEGY COMPARISON: Aggressive vs Conservative")
+    logger.info("="*60)
+    logger.info("")
+    logger.info("-"*60)
+    logger.info("AGGRESSIVE (Original)")
+    logger.info("-"*60)
+    logger.info(f"   Balance:       {aggressive_result['balance']:>15,.2f}")
+    logger.info(f"   Position:      {aggressive_result['position']:>15,.4f}")
+    logger.info(f"   Equity:        {aggressive_result['equity']:>15,.2f}")
+    logger.info(f"   PnL:           {aggressive_result['pnl']:>+15,.2f}")
+    logger.info(f"   Time:          {aggressive_result['elapsed']:>15,.2f}s")
+    logger.info("")
+    logger.info("-"*60)
+    logger.info("CONSERVATIVE (Optimized)")
+    logger.info("-"*60)
+    logger.info(f"   Balance:       {conservative_result['balance']:>15,.2f}")
+    logger.info(f"   Position:      {conservative_result['position']:>15,.4f}")
+    logger.info(f"   Equity:        {conservative_result['equity']:>15,.2f}")
+    logger.info(f"   PnL:           {conservative_result['pnl']:>+15,.2f}")
+    logger.info(f"   Time:          {conservative_result['elapsed']:>15,.2f}s")
+    logger.info("")
+    logger.info("="*60)
     logger.info("SUMMARY")
-    logger.info("=" * 60)
-    logger.info(f"   Baseline PnL:     {baseline_pnl:>+15,.2f}")
-    logger.info(f"   Aggressive PnL:   {aggressive_pnl:>+15,.2f}")
-    logger.info(f"   Difference:       {aggressive_pnl - baseline_pnl:>+15,.2f}")
-    logger.info(f"   Improvement:      {improvement:>+14.2f}%")
-    logger.info(f"   Winner:           {winner:>15}")
-    logger.info("=" * 60)
+    logger.info("="*60)
+    logger.info(f"   Aggressive PnL:    {aggressive_pnl:>+15,.2f}")
+    logger.info(f"   Conservative PnL:  {conservative_pnl:>+15,.2f}")
+    logger.info(f"   Difference:        {conservative_pnl - aggressive_pnl:>+15,.2f}")
+    logger.info(f"   Improvement:       {improvement:>+15,.2f}%")
+    logger.info(f"   Winner:            {winner:>15s}")
+    logger.info("="*60)
     
     return {
-        'baseline_pnl': baseline_pnl,
         'aggressive_pnl': aggressive_pnl,
-        'difference': aggressive_pnl - baseline_pnl,
-        'improvement_pct': improvement,
+        'conservative_pnl': conservative_pnl,
+        'difference': conservative_pnl - aggressive_pnl,
+        'improvement': improvement,
         'winner': winner
     }
 
 
 def main():
-    # Check for data files (優先使用真實數據)
+    # Find data files
     data_files = [
-        ("../data/binance_usdm/btcusdt_20240808.npz", "../data/binance_usdm/btcusdt_20240808_eod.npz", "Binance BTCUSDT 2024-08-08"),
-        ("../data/binance_usdm/btcusdt_20240809.npz", "../data/binance_usdm/btcusdt_20240809_eod.npz", "Binance BTCUSDT 2024-08-09"),
-        ("../../data/binance_usdm/btcusdt_20240808.npz", "../../data/binance_usdm/btcusdt_20240808_eod.npz", "Binance BTCUSDT 2024-08-08"),
-        ("../../data/binance_usdm/btcusdt_20240809.npz", "../../data/binance_usdm/btcusdt_20240809_eod.npz", "Binance BTCUSDT 2024-08-09"),
-        ("../../data/dummy_data.npy", "../../data/dummy_snapshot.npz", "Dummy Data"),
+        ("data/binance_usdm/btcusdt_20240808.npz", "data/binance_usdm/btcusdt_20240808_eod.npz", "Binance BTCUSDT 2024-08-08"),
+        ("data/dummy_data.npy", "data/dummy_snapshot.npz", "Dummy Data"),
     ]
     
-    # Find available data
     available_data = None
     for data_file, snapshot_file, name in data_files:
-        full_data_path = os.path.join(os.path.dirname(__file__), data_file)
-        full_snapshot_path = os.path.join(os.path.dirname(__file__), snapshot_file)
+        full_data_path = Path(__file__).parent.parent.parent / data_file
+        full_snapshot_path = Path(__file__).parent.parent.parent / snapshot_file
         
-        if os.path.exists(full_data_path) and os.path.exists(full_snapshot_path):
-            available_data = (full_data_path, full_snapshot_path, name)
+        if full_data_path.exists() and full_snapshot_path.exists():
+            available_data = (str(full_data_path), str(full_snapshot_path), name)
             break
     
     if available_data is None:
@@ -208,12 +195,8 @@ def main():
     logger.info(f"\nUsing data: {data_name}")
     logger.info(f"File: {data_file}")
     
-    # Load backtest config
+    # Load config
     try:
-        try:
-            from ..core.config_loader import load_config
-        except ImportError:
-            from core.config_loader import load_config
         _, backtest_config, _ = load_config()
     except FileNotFoundError:
         logger.warning("Config file not found, using defaults")
@@ -221,22 +204,22 @@ def main():
     
     # Import strategies
     try:
-        from ..strategies.baseline import market_making_algo as baseline_algo
         from ..strategies.aggressive import market_making_algo as aggressive_algo
+        from ..strategies.aggressive_conservative import market_making_algo as conservative_algo
     except ImportError:
-        from strategies.baseline import market_making_algo as baseline_algo
         from strategies.aggressive import market_making_algo as aggressive_algo
-    
-    # Run baseline
-    logger.info("\nRunning Baseline strategy...")
-    baseline_result = run_strategy(baseline_algo, data_file, snapshot_file, "Baseline", backtest_config)
+        from strategies.aggressive_conservative import market_making_algo as conservative_algo
     
     # Run aggressive
-    logger.info("Running Aggressive strategy...")
+    logger.info("\nRunning Aggressive strategy...")
     aggressive_result = run_strategy(aggressive_algo, data_file, snapshot_file, "Aggressive", backtest_config)
     
+    # Run conservative
+    logger.info("\nRunning Conservative strategy...")
+    conservative_result = run_strategy(conservative_algo, data_file, snapshot_file, "Conservative", backtest_config)
+    
     # Compare
-    summary = print_comparison(baseline_result, aggressive_result)
+    summary = print_comparison(aggressive_result, conservative_result)
     
     return summary
 
@@ -245,8 +228,9 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        logger.info("Comparison interrupted by user")
+        logger.info("\nTest interrupted by user")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"Comparison failed: {e}", exc_info=True)
+        logger.error(f"Test failed: {e}", exc_info=True)
         sys.exit(1)
+
