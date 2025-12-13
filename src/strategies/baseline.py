@@ -29,9 +29,15 @@ def market_making_algo(hbt, stat):
     is_buffer_full = False
     step_count = 0
     
-    while True:
+    # Safety limit: prevent infinite loops
+    max_steps = 1_000_000
+    consecutive_empty_depth = 0
+    max_empty_depth = 100  # If depth is empty for 100 consecutive steps, exit
+    
+    while step_count < max_steps:
         ret = hbt.elapse(100_000_000)
         if ret != 0:
+            # Data ended (ret == 1) or error occurred
             break
         
         step_count += 1
@@ -39,7 +45,13 @@ def market_making_algo(hbt, stat):
         
         depth = hbt.depth(asset_no)
         if depth.best_bid == 0 or depth.best_ask == 0:
+            consecutive_empty_depth += 1
+            if consecutive_empty_depth >= max_empty_depth:
+                # Data likely ended, exit loop
+                break
             continue
+        else:
+            consecutive_empty_depth = 0  # Reset counter when depth is valid
         if np.isnan(depth.best_bid) or np.isnan(depth.best_ask):
             continue
         

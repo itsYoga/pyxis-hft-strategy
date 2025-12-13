@@ -64,7 +64,7 @@ def test_config_loader():
             print(f"  - 日誌級別: {logging_config.level}")
             return True
         except FileNotFoundError:
-            print("⚠ 配置檔案未找到（使用相對路徑）")
+            print("[WARN] 配置檔案未找到（使用相對路徑）")
             # 嘗試絕對路徑
             config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'strategy_aggressive.yaml')
             if os.path.exists(config_path):
@@ -150,7 +150,7 @@ def test_data_loader():
             print(f"✓ 資料檔案驗證成功: {dummy_file}")
             return True
         else:
-            print(f"⚠ 測試資料檔案不存在: {dummy_file}")
+            print(f"[WARN] 測試資料檔案不存在: {dummy_file}")
             return True  # 不算失敗
     except Exception as e:
         print(f"✗ 資料載入器失敗: {e}")
@@ -189,7 +189,7 @@ def main():
         print("\n🎉 所有測試通過！")
         return 0
     else:
-        print(f"\n⚠ {total - passed} 個測試失敗")
+        print(f"\n[WARN] {total - passed} 個測試失敗")
         return 1
 
 

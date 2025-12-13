@@ -26,7 +26,7 @@ def test_pnl_calculation():
     snapshot_file = os.path.join(script_dir, "../../data/dummy_snapshot.npz")
     
     if not os.path.exists(data_file) or not os.path.exists(snapshot_file):
-        print(f"❌ 測試數據文件不存在")
+        print(f"[ERROR] 測試數據文件不存在")
         print(f"   需要: {data_file}, {snapshot_file}")
         return False
     
@@ -58,14 +58,14 @@ def test_pnl_calculation():
         # 檢查 PnL 是否為相對變化（不應該是絕對權益值）
         # 如果 PnL 接近 Equity，說明 initial_equity 接近 0，這是正常的
         if abs(pnl - equity) < 1.0:
-            print(f"\n✅ PnL 計算正確!")
+            print(f"\n[OK] PnL 計算正確!")
             print(f"   PnL = Equity - Initial Equity")
             print(f"   由於 Initial Equity = 0，PnL = Equity = {equity:,.2f}")
             print(f"   這表明策略從零開始，最終權益為 {equity:,.2f}")
             return True
         else:
             # 如果差異很大，可能有問題
-            print(f"\n⚠️ PnL 與 Equity 差異較大")
+            print(f"\n[WARN] PnL 與 Equity 差異較大")
             print(f"   Equity: {equity:,.2f}")
             print(f"   PnL: {pnl:,.2f}")
             print(f"   差異: {abs(pnl - equity):,.2f}")
@@ -73,7 +73,7 @@ def test_pnl_calculation():
             return True  # 仍然返回 True，因為可能是正常的
             
     except Exception as e:
-        print(f"\n❌ 測試失敗: {e}")
+        print(f"\n[ERROR] 測試失敗: {e}")
         import traceback
         traceback.print_exc()
         return False

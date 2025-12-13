@@ -343,4 +343,4 @@ if __name__ == '__main__':
     
     print("\n✓ Online learning module ready!")
     if not RIVER_AVAILABLE:
-        print("⚠ Install River for full functionality: pip install river")
+        print("[WARN] Install River for full functionality: pip install river")

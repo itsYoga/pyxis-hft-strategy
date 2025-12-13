@@ -16,6 +16,9 @@ A High-Frequency Trading (HFT) Market Making framework implementing multi-level 
 - **River Online Learning** - Dynamic alpha weight adjustment
 - **A/B Testing Framework** - Evaluate strategy improvements
 - **Modular Refactoring** - Clean directory structure for better maintainability
+- **Quadratic Inventory Penalty** - Stricter inventory boundary control
+- **Anti-Sniffing Logic** - Prevent predatory algorithms from detecting inventory intent
+- **Exponential Decay MLOFI** - Optimized multi-level signal weighting
 
 ---
 
@@ -197,8 +200,15 @@ flow = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 ## Strategy Comparison
 
 ```bash
-# Run comparison test
+# Run comparison test (Baseline vs Optimized)
 python src/tests/compare_strategies.py
+
+# Or use test script
+./scripts/test_optimization.sh
+```
+
+**Testing Optimizations:**
+- See [Testing Guide](docs/guides/HOW_TO_TEST_OPTIMIZATIONS.md) for how to verify optimization effectiveness
 
 # Sample output:
 # ============================================================
@@ -263,17 +273,31 @@ python src/core/backtest.py data.npz -s snapshot.npz # Custom snapshot
 
 ## Live Trading (OKX Demo)
 
+### Using Optimized Strategy (Recommended)
+
 ```bash
 # 1. Setup API (copy .env.example and fill in your API)
 cp .env.example .env
 # Edit .env with your OKX Demo Trading API Key/Secret/Passphrase
 
 # 2. Test connection
+python src/scripts/live_trading_optimized.py --test
+
+# 3. Start optimized strategy (includes all optimizations)
+python src/scripts/live_trading_optimized.py
+```
+
+### Using Original Strategy
+
+```bash
+# Test connection
 python src/scripts/live_trading.py --test
 
-# 3. Start trading
+# Start trading
 python src/scripts/live_trading.py
 ```
+
+**Detailed Guide:** See [OKX Simulated Trading Guide](docs/guides/OKX_SIMULATED_TRADING.md)
 
 ---
 
@@ -316,6 +340,21 @@ python src/scripts/recorder.py --symbol BTC-USDT-SWAP --output data/
 | Sharpe Ratio | > 1.5 |
 | Max Drawdown | < 10% |
 | Win Rate | > 50% |
+
+---
+
+## Strategy Optimization Roadmap
+
+We have developed a comprehensive optimization plan from stochastic control to deep reinforcement learning:
+
+- **[Strategy Optimization Analysis](docs/reports/STRATEGY_OPTIMIZATION_ROADMAP.md)** - Detailed optimization theory and mathematical framework
+- **[Implementation Plan](docs/reports/IMPLEMENTATION_PLAN.md)** - Phase-by-phase implementation guide
+
+**Optimization Focus:**
+- 🛡️ Defensive Mechanisms: Anti-Sniffing logic
+- ⚠️ Flow Toxicity: VPIN detection
+- 🤖 Dynamic Control: Alpha-AS Deep Reinforcement Learning architecture
+- 📊 Execution Precision: Queue position simulation
 
 ---
 

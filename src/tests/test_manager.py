@@ -320,7 +320,7 @@ def run_test_with_recording(
             notes=notes
         )
         
-        logger.info(f"✅ 測試完成: PnL = {result['pnl']:+.2f}")
+        logger.info(f"[OK] 測試完成: PnL = {result['pnl']:+.2f}")
         
         return test_record
         

@@ -14,11 +14,14 @@ Key features:
 5. Asymmetric "Hunt" logic - tighten side aligned with alpha
 6. Non-linear alpha boost for extreme imbalances
 7. Capped slope adjustment (max 1.2x)
+8. Quadratic inventory penalty - stricter boundaries on inventory
+9. Anti-sniffing logic - mask inventory intent from predatory algorithms
 
 Philosophy: "You must be in the market to make money"
 - Prioritize fill rate over per-trade margin
 - Trust alpha signals, especially during volatility
 - Maximize inventory turnover, not minimize risk
+- Defend against predatory algorithms and flow toxicity
 """
 
 
@@ -60,9 +63,24 @@ def market_making_algo(hbt, stat, recorder=None):
     mlofi_weight = 0.8          # Was 0.5 - OFI is primary predictor
     slope_weight = 0.0          # Disable EPI (causes double penalty)
     
+    # ========================================
+    # Phase 1: Defensive Mechanisms
+    # ========================================
+    # Quadratic inventory penalty (instead of linear)
+    use_quadratic_penalty = True
+    
+    # Anti-sniffing parameters
+    lambda_read = 0.3           # Anti-sniffing penalty coefficient
+    max_skew_penalty = 0.5      # Maximum skew adjustment (in ticks)
+    use_anti_sniffing = True
+    
     # Multi-level depth
     num_levels = 5
     ofi_decay = 0.7
+    
+    # Phase 3: Optimized MLOFI with exponential decay
+    use_exponential_decay_mlofi = True
+    alpha_decay = 0.5  # Exponential decay factor for MLOFI
     
     # Volatility
     window_size = 500
@@ -168,7 +186,11 @@ def market_making_algo(hbt, stat, recorder=None):
         
         if prev_initialized:
             for i in range(num_levels):
-                weight = ofi_decay ** i
+                # Phase 3: Use exponential decay instead of power decay
+                if use_exponential_decay_mlofi:
+                    weight = np.exp(-alpha_decay * i)  # Exponential decay: e^(-0.5*i)
+                else:
+                    weight = ofi_decay ** i  # Original power decay
                 
                 delta_bid = 0.0
                 delta_ask = 0.0
@@ -301,10 +323,21 @@ def market_making_algo(hbt, stat, recorder=None):
         # ========================================
         position = hbt.position(asset_no)
         
+        # Phase 1.1: Quadratic Inventory Penalty
+        # Linear: position * gamma * volatility^2
+        # Quadratic: position * gamma * volatility^2 * |position| / max_position
+        if use_quadratic_penalty:
+            # Quadratic penalty: more aggressive as inventory approaches limits
+            position_factor = abs(position) / max_position if max_position > 0 else 0.0
+            inventory_adjustment = position * regime_gamma * (volatility ** 2) * (1.0 + position_factor)
+        else:
+            # Original linear penalty
+            inventory_adjustment = position * regime_gamma * (volatility ** 2)
+        
         reservation_price = (
             mid_price 
             + forecast * tick_size
-            - position * regime_gamma * (volatility ** 2)
+            - inventory_adjustment
         )
         
         # ========================================
@@ -339,8 +372,34 @@ def market_making_algo(hbt, stat, recorder=None):
         # Inventory skew
         skew = 0.2 * position / max_position if max_position > 0 else 0.0
         
-        bid_price = reservation_price - half_spread * bid_spread_mult * (1 + skew)
-        ask_price = reservation_price + half_spread * ask_spread_mult * (1 - skew)
+        # Phase 1.2: Anti-Sniffing Logic
+        # Mask inventory intent by pulling quotes back toward mid if skew is too obvious
+        if use_anti_sniffing:
+            normalized_position = position / max_position if max_position > 0 else 0.0
+            # Calculate how obvious the skew is
+            obvious_skew = abs(skew)
+            # Penalty pulls quotes back toward mid to mask intent
+            sniff_penalty = lambda_read * obvious_skew * tick_size
+            # Cap the penalty
+            sniff_penalty = max(-max_skew_penalty * tick_size, min(max_skew_penalty * tick_size, sniff_penalty))
+            
+            # Apply penalty: if long (positive position), reduce bid/ask spread to hide intent
+            # If short (negative position), reduce ask/bid spread
+            if position > 0:  # Long position - want to sell but hide it
+                bid_sniff_adjust = -sniff_penalty  # Pull bid up slightly
+                ask_sniff_adjust = sniff_penalty   # Pull ask down slightly
+            elif position < 0:  # Short position - want to buy but hide it
+                bid_sniff_adjust = sniff_penalty   # Pull bid down slightly
+                ask_sniff_adjust = -sniff_penalty  # Pull ask up slightly
+            else:
+                bid_sniff_adjust = 0.0
+                ask_sniff_adjust = 0.0
+        else:
+            bid_sniff_adjust = 0.0
+            ask_sniff_adjust = 0.0
+        
+        bid_price = reservation_price - half_spread * bid_spread_mult * (1 + skew) + bid_sniff_adjust
+        ask_price = reservation_price + half_spread * ask_spread_mult * (1 - skew) + ask_sniff_adjust
         
         # Quantize
         bid_price_tick = round(bid_price / tick_size) * tick_size

@@ -96,7 +96,7 @@ class OKXTradingBot:
         
     async def connect_public(self):
         """Connect to public WebSocket for market data"""
-        print(f"\n📡 Connecting to OKX Public WebSocket...")
+        print(f"\n[INFO] Connecting to OKX Public WebSocket...")
         print(f"   Symbol: {self.symbol}")
         print(f"   Sandbox: {IS_SANDBOX}")
         
@@ -109,7 +109,7 @@ class OKXTradingBot:
                 ]
             }
             await ws.send(json.dumps(subscribe_msg))
-            print(f"✅ Subscribed to {self.symbol} order book")
+            print(f"[OK] Subscribed to {self.symbol} order book")
             
             while self.running:
                 try:
@@ -135,7 +135,7 @@ class OKXTradingBot:
     
     async def connect_private(self):
         """Connect to private WebSocket for trading"""
-        print(f"\n🔐 Connecting to OKX Private WebSocket...")
+        print(f"\n[INFO] Connecting to OKX Private WebSocket...")
         
         async with websockets.connect(WS_PRIVATE) as ws:
             # Login
@@ -146,9 +146,9 @@ class OKXTradingBot:
             result = json.loads(response)
             
             if result.get('event') == 'login' and result.get('code') == '0':
-                print("✅ Login successful!")
+                print("[OK] Login successful!")
             else:
-                print(f"❌ Login failed: {result}")
+                print(f"[ERROR] Login failed: {result}")
                 return
             
             # Subscribe to orders and positions
@@ -160,7 +160,7 @@ class OKXTradingBot:
                 ]
             }
             await ws.send(json.dumps(subscribe_msg))
-            print("✅ Subscribed to orders and positions")
+            print("[OK] Subscribed to orders and positions")
             
             while self.running:
                 try:
@@ -193,7 +193,7 @@ class OKXTradingBot:
                         
     async def trading_loop(self):
         """Main trading strategy loop"""
-        print(f"\n🚀 Starting trading strategy...")
+        print(f"\n[INFO] Starting trading strategy...")
         print(f"   Parameters: gamma={self.gamma}, k={self.k}, alpha_weight={self.alpha_weight}")
         
         while self.running:
@@ -247,7 +247,7 @@ class OKXTradingBot:
     async def run(self):
         """Run the trading bot"""
         print("\n" + "="*50)
-        print("🤖 Pyxis HFT Trading Bot")
+        print("Pyxis HFT Trading Bot")
         print("="*50)
         print(f"Symbol: {self.symbol}")
         print(f"Sandbox Mode: {IS_SANDBOX}")
@@ -255,7 +255,7 @@ class OKXTradingBot:
         print("="*50)
         
         if not API_KEY or not SECRET_KEY:
-            print("\n❌ Error: API credentials not configured!")
+            print("\n[ERROR] API credentials not configured!")
             print("   Please set up your .env file")
             return
         
@@ -267,16 +267,16 @@ class OKXTradingBot:
                 self.trading_loop()
             )
         except KeyboardInterrupt:
-            print("\n\n⏹️  Stopping bot...")
+            print("\n\n[INFO] Stopping bot...")
             self.running = False
         except Exception as e:
-            print(f"\n❌ Error: {e}")
+            print(f"\n[ERROR] Error: {e}")
             self.running = False
 
 
 async def test_connection():
     """Test OKX connection without trading"""
-    print("\n🔍 Testing OKX Connection...")
+    print("\n[INFO] Testing OKX Connection...")
     print(f"   Sandbox: {IS_SANDBOX}")
     print(f"   API Key: {API_KEY[:8]}..." if API_KEY else "   API Key: NOT SET")
     
@@ -297,10 +297,10 @@ async def test_connection():
                     print(f"   BTC Price: {price}")
                     break
                     
-            print("\n✅ Connection test successful!")
+            print("\n[OK] Connection test successful!")
             
     except Exception as e:
-        print(f"\n❌ Connection test failed: {e}")
+        print(f"\n[ERROR] Connection test failed: {e}")
 
 
 if __name__ == "__main__":

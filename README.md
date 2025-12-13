@@ -16,6 +16,9 @@ Pyxis 團隊的高頻交易做市回測框架，實作多層級訂單流不平�
 - **River 線上學習** - 動態調整 Alpha 權重
 - **A/B 測試框架** - 評估策略改進
 - **模組化重組** - 清晰的目錄結構，提升可維護性
+- **二次庫存懲罰** - 更嚴格的庫存邊界控制
+- **反嗅探邏輯** - 防止掠奪性算法識別庫存意圖
+- **指數衰減 MLOFI** - 優化的多層級信號權重
 
 ---
 
@@ -197,8 +200,15 @@ flow = (buy_volume - sell_volume) / (buy_volume + sell_volume)
 ## 策略對比測試
 
 ```bash
-# 運行對比測試
+# 運行對比測試（比較 Baseline vs 優化後的策略）
 python src/tests/compare_strategies.py
+
+# 或使用測試腳本
+./scripts/test_optimization.sh
+```
+
+**測試優化效果：**
+- 查看 [測試優化指南](docs/guides/HOW_TO_TEST_OPTIMIZATIONS.md) 了解如何驗證優化效果
 
 # 結果範例:
 # ============================================================
@@ -263,17 +273,31 @@ python src/core/backtest.py data.npz -s snapshot.npz # 自訂快照
 
 ## Live Trading (OKX Demo)
 
+### 使用優化後的策略（推薦）
+
 ```bash
 # 1. 設定 API (複製 .env.example 並填入你的 API)
 cp .env.example .env
 # 編輯 .env 填入 OKX Demo Trading API Key/Secret/Passphrase
 
 # 2. 測試連線
+python src/scripts/live_trading_optimized.py --test
+
+# 3. 啟動優化後的策略（包含所有優化）
+python src/scripts/live_trading_optimized.py
+```
+
+### 使用原始策略
+
+```bash
+# 測試連線
 python src/scripts/live_trading.py --test
 
-# 3. 啟動交易
+# 啟動交易
 python src/scripts/live_trading.py
 ```
+
+**詳細指南：** 查看 [OKX 模擬交易指南](docs/guides/OKX_SIMULATED_TRADING.md)
 
 ---
 
@@ -316,6 +340,21 @@ python src/scripts/recorder.py --symbol BTC-USDT-SWAP --output data/
 | Sharpe Ratio | > 1.5 |
 | Max Drawdown | < 10% |
 | Win Rate | > 50% |
+
+---
+
+## 策略優化路線圖
+
+我們已經制定了從隨機控制到深度強化學習的完整優化計劃：
+
+- **[策略優化分析報告](docs/reports/STRATEGY_OPTIMIZATION_ROADMAP.md)** - 詳細的優化理論和數學框架
+- **[實現計劃](docs/reports/IMPLEMENTATION_PLAN.md)** - 分階段實施指南
+
+**優化重點：**
+- 🛡️ 防禦機制：反嗅探邏輯（Anti-Sniffing）
+- ⚠️ 流動性毒性：VPIN 檢測
+- 🤖 動態控制：Alpha-AS 深度強化學習架構
+- 📊 執行精度：隊列位置模擬
 
 ---
 

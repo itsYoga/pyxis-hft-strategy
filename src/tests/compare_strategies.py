@@ -66,6 +66,7 @@ def run_strategy(strategy_func, data_file, snapshot_file, strategy_name, backtes
         stat = np.zeros(20, dtype=np.float64)
         
         logger.info(f"Running {strategy_name} strategy...")
+        logger.info("This may take a few seconds to process all market data...")
         start_time = time.time()
         
         try:
@@ -75,6 +76,7 @@ def run_strategy(strategy_func, data_file, snapshot_file, strategy_name, backtes
             raise
         
         elapsed = time.time() - start_time
+        logger.info(f"{strategy_name} completed in {elapsed:.2f} seconds")
         
         # Get results
         stat_val = hbt.state_values(0)
@@ -165,10 +167,12 @@ def print_comparison(baseline_result, aggressive_result):
 
 
 def main():
-    # Check for data files
+    # Check for data files (優先使用真實數據)
     data_files = [
         ("../data/binance_usdm/btcusdt_20240808.npz", "../data/binance_usdm/btcusdt_20240808_eod.npz", "Binance BTCUSDT 2024-08-08"),
         ("../data/binance_usdm/btcusdt_20240809.npz", "../data/binance_usdm/btcusdt_20240809_eod.npz", "Binance BTCUSDT 2024-08-09"),
+        ("../../data/binance_usdm/btcusdt_20240808.npz", "../../data/binance_usdm/btcusdt_20240808_eod.npz", "Binance BTCUSDT 2024-08-08"),
+        ("../../data/binance_usdm/btcusdt_20240809.npz", "../../data/binance_usdm/btcusdt_20240809_eod.npz", "Binance BTCUSDT 2024-08-09"),
         ("../../data/dummy_data.npy", "../../data/dummy_snapshot.npz", "Dummy Data"),
     ]
     
