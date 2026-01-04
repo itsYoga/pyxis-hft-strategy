@@ -48,7 +48,7 @@ echo "web: python src/utils/dashboard.py" > Procfile
 pip freeze > requirements.txt
 
 # 4. 部署
-heroku create pyxis-hft-dashboard
+heroku create hft-dashboard
 git push heroku main
 ```
 
@@ -78,7 +78,7 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'pyxis-strategy'
+  - job_name: 'hft-strategy'
     static_configs:
       - targets: ['localhost:9090']
 ```
@@ -97,7 +97,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-st.title("Pyxis HFT Strategy Dashboard")
+st.title("HFT Strategy Dashboard")
 
 # 讀取數據
 log_file = "logs/trading/performance_latest.csv"
@@ -250,7 +250,7 @@ def send_update(message):
 2. **克隆項目**
    ```bash
    git clone <your-repo>
-   cd pyxis-hft-strategy
+   cd hft-strategy
    ```
 
 3. **設置環境**
@@ -262,15 +262,15 @@ def send_update(message):
 
 4. **使用 systemd 運行**
    ```ini
-   # /etc/systemd/system/pyxis-strategy.service
+   # /etc/systemd/system/hft-strategy.service
    [Unit]
-   Description=Pyxis HFT Strategy
+   Description=HFT Strategy
    After=network.target
 
    [Service]
    Type=simple
    User=your_user
-   WorkingDirectory=/path/to/pyxis-hft-strategy
+   WorkingDirectory=/path/to/hft-strategy
    ExecStart=/path/to/venv/bin/python src/scripts/live_trading_optimized.py
    Restart=always
 
@@ -280,9 +280,9 @@ def send_update(message):
 
 5. **啟動服務**
    ```bash
-   sudo systemctl enable pyxis-strategy
-   sudo systemctl start pyxis-strategy
-   sudo systemctl status pyxis-strategy
+   sudo systemctl enable hft-strategy
+   sudo systemctl start hft-strategy
+   sudo systemctl status hft-strategy
    ```
 
 ---

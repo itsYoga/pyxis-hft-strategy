@@ -1,253 +1,159 @@
-# Pyxis HFT Strategy 完整指南
+# HFT Strategy Backtest Guide
 
-## 📋 目錄
+## Contents
 
-1. [快速開始](#快速開始)
-2. [運行策略](#運行策略)
-3. [測試與驗證](#測試與驗證)
-4. [配置說明](#配置說明)
-5. [策略優化](#策略優化)
-6. [實時交易](#實時交易)
-7. [監控與儀表板](#監控與儀表板)
-8. [常見問題](#常見問題)
+1. [Quick Start](#quick-start)
+2. [Running Backtest](#running-backtest)
+3. [Configuration](#configuration)
+4. [Live Trading](#live-trading)
+5. [Monitoring & Dashboard](#monitoring--dashboard)
+6. [FAQ](#faq)
 
 ---
 
-## 快速開始
+## Quick Start
 
-### 1. 安裝依賴
+### 1. Install Dependencies
 
 ```bash
-cd pyxis-hft-strategy
+cd hft-strategy
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. 運行基本回測
+### 2. Run Basic Backtest
 
 ```bash
-# 使用真實數據
+# With real data
 python src/core/backtest.py data/binance_usdm/btcusdt_20240808.npz \
     --snapshot data/binance_usdm/btcusdt_20240808_eod.npz
 
-# 不顯示圖表（更快）
+# Without visualization (faster)
 python src/core/backtest.py data/binance_usdm/btcusdt_20240808.npz \
     --snapshot data/binance_usdm/btcusdt_20240808_eod.npz --no-viz
 ```
 
-### 3. 策略對比
-
-```bash
-python src/tests/compare_strategies.py
-```
-
 ---
 
-## 運行策略
+## Running Backtest
 
-### 基本命令
+### Basic Commands
 
 ```bash
-# 基本運行
+# Basic run
 python src/core/backtest.py <data_file> [--snapshot <snapshot_file>] [--no-viz] [--config <config_file>]
 
-# 使用自定義配置
+# With custom config
 python src/core/backtest.py data/binance_usdm/btcusdt_20240808.npz \
     --snapshot data/binance_usdm/btcusdt_20240808_eod.npz \
-    --config config/strategy_aggressive.yaml
+    --config config/backtest.yaml
 ```
 
-### 命令行選項
+### Command Line Options
 
-- `data_file`: 市場數據文件（必需）
-- `--snapshot, -s`: 快照文件（可選，會自動檢測）
-- `--no-viz`: 禁用視覺化（更快）
-- `--save`: 保存報告到文件
-- `--config, -c`: 配置文件路徑
+- `data_file`: Market data file (required)
+- `--snapshot, -s`: Snapshot file (optional, auto-detected)
+- `--no-viz`: Disable visualization (faster)
+- `--save`: Save report to file
+- `--config, -c`: Config file path
 
-### 數據文件格式
+### Supported Data Formats
 
-支持的格式：
-- `.npz`: NumPy 壓縮格式（推薦）
-- `.npy`: NumPy 數組格式
-- `.gz`: Gzip 壓縮格式
+- `.npz`: NumPy compressed format (recommended)
+- `.npy`: NumPy array format
+- `.gz`: Gzip compressed format
 
 ---
 
-## 測試與驗證
+## Configuration
 
-### 1. 策略對比測試
+### Configuration Files
 
-```bash
-# 對比 Baseline vs Aggressive
-python src/tests/compare_strategies.py
+Located in `config/` directory.
 
-# 測試保守版本
-python src/tests/test_conservative_strategy.py
-
-# 參數掃描
-python src/tests/parameter_sweep.py
-```
-
-### 2. 運行所有測試
-
-```bash
-./scripts/run_all_tests.sh
-```
-
-### 3. 測試優化效果
-
-```bash
-python src/tests/test_optimizations.py
-```
-
----
-
-## 配置說明
-
-### 配置文件位置
-
-- `config/strategy_aggressive.yaml` - 激進策略配置
-- `config/strategy_aggressive_conservative.yaml` - 保守策略配置
-
-### 主要參數
+### Main Parameters
 
 ```yaml
-strategy:
-  parameters:
-    gamma_base: 0.05      # 風險厭惡係數
-    k_base: 1.5           # 價差參數
-    max_position: 10.0    # 最大持倉
-    order_qty: 1.0        # 訂單數量
-
 backtest:
-  tick_size: 0.1          # 最小價格變動
-  lot_size: 0.001         # 最小訂單大小
-  initial_capital: 30000.0 # 初始資本
+  tick_size: 0.1          # Minimum price movement
+  lot_size: 0.001         # Minimum order size
+  initial_capital: 30000.0 # Initial capital
 ```
 
-詳細配置說明請參考 `docs/guides/CONFIGURATION_GUIDE.md`
+Detailed configuration: `docs/guides/CONFIGURATION_GUIDE.md`
 
 ---
 
-## 策略優化
+## Live Trading
 
-### 1. PnL 優化
-
-參考 `docs/guides/OPTIMIZE_PNL.md` 了解如何優化策略 PnL。
-
-主要方法：
-- 擴大價差（減少不利選擇）
-- 調整風險厭惡係數
-- 更嚴格的庫存管理
-- 添加止損機制
-
-### 2. 參數掃描
+### OKX Simulated Trading
 
 ```bash
-python src/tests/parameter_sweep.py
-```
+# Start live trading
+python src/scripts/live_trading.py
 
-掃描不同參數組合，找出最優參數。
-
-### 3. 策略版本
-
-- **Baseline**: 基礎策略（Level 1 訂單簿）
-- **Aggressive**: 優化策略（多層級 OFI + 狀態檢測）
-- **Conservative**: 保守版本（更寬價差，更嚴格風險管理）
-- **Enhanced**: 增強版本（止損 + 市場狀態過濾）
-
----
-
-## 實時交易
-
-### OKX 模擬交易
-
-```bash
-# 啟動實時交易
-python src/scripts/live_trading_optimized.py
-
-# 查看配置
+# View configuration
 cat .env.example
 ```
 
-詳細說明請參考 `docs/guides/OKX_SIMULATED_TRADING.md`
+Detailed guide: `docs/guides/OKX_SIMULATED_TRADING.md`
 
-### 環境變量設置
+### Environment Variables
 
-創建 `.env` 文件：
+Create `.env` file:
 
 ```bash
 OKX_API_KEY=your_api_key
 OKX_SECRET_KEY=your_secret_key
 OKX_PASSPHRASE=your_passphrase
-OKX_SANDBOX=true  # 使用模擬環境
+OKX_SANDBOX=true  # Use simulated environment
 ```
 
 ---
 
-## 監控與儀表板
+## Monitoring & Dashboard
 
-### Streamlit 儀表板
+### Streamlit Dashboard
 
 ```bash
-# 啟動儀表板
+# Start dashboard
 ./scripts/start_dashboard.sh
 
-# 或手動啟動
+# Or manually
 streamlit run src/utils/streamlit_dashboard.py
 ```
 
-訪問 `http://localhost:8501` 查看實時監控。
+Visit `http://localhost:8501` for real-time monitoring.
 
-### Flask 儀表板
+### Flask Dashboard
 
 ```bash
 python src/utils/dashboard.py
 ```
 
-訪問 `http://localhost:5000` 查看監控。
+Visit `http://localhost:5000` for monitoring.
 
-詳細說明請參考 `docs/guides/DASHBOARD_AND_MONITORING.md`
-
----
-
-## 常見問題
-
-### Q: PnL 為負數怎麼辦？
-
-A: 參考 `docs/guides/OPTIMIZE_PNL.md`，主要方法：
-1. 擴大價差（增加 k_base）
-2. 調整風險厭惡係數（增加 gamma_base）
-3. 更嚴格的庫存管理
-4. 添加止損機制
-
-### Q: 如何測試策略改進？
-
-A: 使用 `compare_strategies.py` 對比不同策略版本。
-
-### Q: 如何優化參數？
-
-A: 使用 `parameter_sweep.py` 進行參數掃描。
-
-### Q: 實時交易如何設置？
-
-A: 參考 `docs/guides/OKX_SIMULATED_TRADING.md` 和 `docs/guides/QUICK_START_OKX.md`
-
-### Q: 如何查看策略性能？
-
-A: 使用 Streamlit 或 Flask 儀表板，或查看 `logs/trading/` 目錄下的日誌文件。
+Detailed guide: `docs/guides/DASHBOARD_AND_MONITORING.md`
 
 ---
 
-## 相關文檔
+## FAQ
 
-- **策略優化路線圖**: `docs/reports/STRATEGY_OPTIMIZATION_ROADMAP.md`
-- **實施計劃**: `docs/reports/IMPLEMENTATION_PLAN.md`
-- **測試結果**: `docs/results/`
-- **配置指南**: `docs/guides/CONFIGURATION_GUIDE.md`
+### Q: How to setup live trading?
+
+A: Reference `docs/guides/OKX_SIMULATED_TRADING.md` and `docs/guides/QUICK_START_OKX.md`
+
+### Q: How to view performance?
+
+A: Use Streamlit or Flask dashboard, or check log files in `logs/trading/` directory.
 
 ---
 
-*最後更新: 2025-12-13*
+## Related Documentation
 
+- **Test Results**: `docs/results/`
+- **Configuration Guide**: `docs/guides/CONFIGURATION_GUIDE.md`
+
+---
+
+*Last updated: 2025-01*

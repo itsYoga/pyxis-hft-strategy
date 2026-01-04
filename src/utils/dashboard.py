@@ -24,7 +24,7 @@ DASHBOARD_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pyxis HFT Strategy Dashboard</title>
+    <title>HFT Strategy Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <style>
         body {
@@ -92,7 +92,7 @@ DASHBOARD_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>Pyxis HFT Strategy Dashboard</h1>
+        <h1>HFT Strategy Dashboard</h1>
         
         <div id="status" class="status stopped">
             Status: Checking...
@@ -327,7 +327,7 @@ def get_data():
 
 if __name__ == '__main__':
     print("\n" + "="*60)
-    print("Pyxis HFT Strategy Dashboard")
+    print("HFT Strategy Dashboard")
     print("="*60)
     print("Access dashboard at: http://localhost:5000")
     print("Press Ctrl+C to stop")

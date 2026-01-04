@@ -1,5 +1,5 @@
 """
-Streamlit Dashboard for Pyxis HFT Strategy
+Streamlit Dashboard for HFT Strategy
 ==========================================
 簡單易用的實時監控儀表板
 
@@ -17,12 +17,12 @@ from datetime import datetime
 import time
 
 st.set_page_config(
-    page_title="Pyxis HFT Strategy Dashboard",
+    page_title="HFT Strategy Dashboard",
     page_icon=None,
     layout="wide"
 )
 
-st.title("Pyxis HFT Strategy Dashboard")
+st.title("HFT Strategy Dashboard")
 
 # 獲取最新的日誌文件
 def get_latest_log_file():

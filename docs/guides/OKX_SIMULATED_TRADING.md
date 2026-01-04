@@ -96,7 +96,7 @@ python src/scripts/live_trading.py
 
 ```
 ============================================================
-🤖 Pyxis HFT Trading Bot (Optimized Strategy)
+HFT Trading Bot (Optimized Strategy)
 ============================================================
 Symbol: BTC-USDT-SWAP
 Sandbox Mode: True

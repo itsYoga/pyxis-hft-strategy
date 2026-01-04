@@ -1,8 +1,6 @@
 """
-Pyxis HFT Strategy Framework
-============================
-高頻做市策略框架
+HFT Strategy Backtest Framework
+===============================
 """
 
 __version__ = "1.0.0"
-

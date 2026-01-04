@@ -247,7 +247,7 @@ class OKXTradingBot:
     async def run(self):
         """Run the trading bot"""
         print("\n" + "="*50)
-        print("Pyxis HFT Trading Bot")
+        print("HFT Trading Bot")
         print("="*50)
         print(f"Symbol: {self.symbol}")
         print(f"Sandbox Mode: {IS_SANDBOX}")
